@@ -41,6 +41,15 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 
+// --- 1. กำหนดแมปสีตาม Source ต่างๆ ---
+const SOURCE_COLORS: Record<string, string> = {
+  abdc: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-800",
+  scopus: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:border-emerald-800",
+  scimago: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
+  ajg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800",
+};
+
+// Tier fallback เผื่อกรณีใช้จัดลำดับทั่วไป
 const TIER_COLORS: Record<number, string> = {
   1: "bg-primary/10 text-primary border-primary/20",
   2: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -49,35 +58,78 @@ const TIER_COLORS: Record<number, string> = {
   5: "bg-zinc-50 text-zinc-400 border-zinc-200",
 };
 
+// --- 2. แมปประเภท Rank ในแต่ละ Source เข้ากับ Tier ---
 const TIER_MAP: Record<string, number> = {
-  "4*": 1,
-  "A*": 2, "4": 2, "Q1": 2,
-  "A": 3, "3": 3, "Q2": 3,
-  "B": 4, "2": 4, "Q3": 4,
-  "C": 5, "1": 5, "Q4": 5,
+  // AJG (ม่วง): 4*, 4, 3, 2, 1
+  "4*": 1, "4": 2, "3": 3, "2": 4, "1": 5,
+  // ABDC (ฟ้า): A*, A, B, C
+  "A*": 2, "A": 3, "B": 4, "C": 5,
+  // Scimago / Scopus (ส้ม/เขียว): Q1, Q2, Q3, Q4
+  "Q1": 2, "Q2": 3, "Q3": 4, "Q4": 5,
+};
+
+type RankItem = {
+  value: string;
+  source: "abdc" | "scopus" | "scimago" | "ajg";
+  tier: number;
 };
 
 function getTopRanks(journal: {
   rating_2025: string | null;
   ajg: { ajg_2024_rating: string | null } | null;
   scimago: { sjr_best_quartile: string | null } | null;
-}): string[] {
-  const ranks: { value: string; tier: number }[] = [];
-  const push = (v: string | null) => {
-    const trimmed = v?.trim();
-    if (trimmed && TIER_MAP[trimmed]) ranks.push({ value: trimmed, tier: TIER_MAP[trimmed] });
-  };
-  push(journal.rating_2025);
-  push(journal.ajg?.ajg_2024_rating ?? null);
-  push(journal.scimago?.sjr_best_quartile ?? null);
+  scopus?: { quartile: string | null } | null;
+}): RankItem[] {
+  const ranks: RankItem[] = [];
+
+  if (journal.rating_2025?.trim()) {
+    const val = journal.rating_2025.trim();
+    if (TIER_MAP[val]) {
+      ranks.push({ value: val, source: "abdc", tier: TIER_MAP[val] });
+    }
+  }
+
+  if (journal.ajg?.ajg_2024_rating?.trim()) {
+    const val = journal.ajg.ajg_2024_rating.trim();
+    if (TIER_MAP[val]) {
+      ranks.push({ value: val, source: "ajg", tier: TIER_MAP[val] });
+    }
+  }
+
+  if (journal.scimago?.sjr_best_quartile?.trim()) {
+    const val = journal.scimago.sjr_best_quartile.trim();
+    if (TIER_MAP[val]) {
+      ranks.push({ value: val, source: "scimago", tier: TIER_MAP[val] });
+    }
+  }
+
+  if (journal.scopus?.quartile?.trim()) {
+    const val = journal.scopus.quartile.trim();
+    if (TIER_MAP[val]) {
+      ranks.push({ value: val, source: "scopus", tier: TIER_MAP[val] });
+    }
+  }
+
   if (ranks.length === 0) return [];
+
+  // หาอันดับ Tier ที่ดีที่สุด (ค่าน้อยที่สุด)
   const bestTier = Math.min(...ranks.map((r) => r.tier));
-  return ranks.filter((r) => r.tier === bestTier).map((r) => r.value);
+  
+  // คืนค่าเฉพาะตัวที่เป็น Top Rank (อาจมีมากกว่า 1 Source ที่ได้ Tier เท่ากัน)
+  return ranks.filter((r) => r.tier === bestTier);
 }
 
-function RatingBadge({ label, value }: { label: string; value: string }) {
-  const tier = TIER_MAP[value] ?? 5;
-  const color = TIER_COLORS[tier] ?? TIER_COLORS[5];
+// --- 3. Badge แสดงผลโดยแยกสีตาม Source ---
+function RatingBadge({
+  label,
+  value,
+  source,
+}: {
+  label: string;
+  value: string;
+  source: "abdc" | "scopus" | "scimago" | "ajg";
+}) {
+  const color = SOURCE_COLORS[source] ?? TIER_COLORS[5];
   return (
     <Badge variant="outline" className={`text-xs font-medium ${color}`}>
       {label}: {value}
@@ -264,6 +316,7 @@ export default function AreaExplorer() {
                     issn_online: string | null;
                     ajg: { ajg_2024_rating: string | null } | null;
                     scimago: { sjr_best_quartile: string | null } | null;
+                    scopus?: { quartile: string | null } | null;
                   }) => (
                     <TableRow
                       key={journal.id}
@@ -282,14 +335,21 @@ export default function AreaExplorer() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
+                          {/* ABDC - สีฟ้า */}
                           {journal.rating_2025 && (
-                            <RatingBadge label="ABDC" value={journal.rating_2025.trim()} />
+                            <RatingBadge label="ABDC" value={journal.rating_2025.trim()} source="abdc" />
                           )}
+                          {/* AJG - สีม่วง */}
                           {journal.ajg?.ajg_2024_rating && (
-                            <RatingBadge label="AJG" value={journal.ajg.ajg_2024_rating.trim()} />
+                            <RatingBadge label="AJG" value={journal.ajg.ajg_2024_rating.trim()} source="ajg" />
                           )}
+                          {/* Scimago - สีส้ม */}
                           {journal.scimago?.sjr_best_quartile && (
-                            <RatingBadge label="SJR" value={journal.scimago.sjr_best_quartile.trim()} />
+                            <RatingBadge label="Scimago" value={journal.scimago.sjr_best_quartile.trim()} source="scimago" />
+                          )}
+                          {/* Scopus - สีเขียว (รองรับหากมีข้อมูล) */}
+                          {journal.scopus?.quartile && (
+                            <RatingBadge label="Scopus" value={journal.scopus.quartile.trim()} source="scopus" />
                           )}
                         </div>
                       </TableCell>
@@ -300,18 +360,21 @@ export default function AreaExplorer() {
                         {journal.issn_online ?? "—"}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1">
-                          {getTopRanks(journal).map((rank) => {
-                            const tier = TIER_MAP[rank] ?? 5;
-                            const color = TIER_COLORS[tier] ?? TIER_COLORS[5];
-                            return (
-                              <Badge key={rank} variant="outline" className={`text-xs font-medium ${color}`}>
-                                {rank}
-                              </Badge>
-                            );
-                          })}
-                        </div>
-                      </TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {getTopRanks(journal).map((rankItem, index) => {
+                          const color = SOURCE_COLORS[rankItem.source] ?? TIER_COLORS[5];
+                          return (
+                            <Badge 
+                              key={`${rankItem.source}-${rankItem.value}-${index}`} 
+                              variant="outline" 
+                              className={`text-xs font-medium ${color}`}
+                            >
+                              {rankItem.value}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </TableCell>
                     </TableRow>
                   ))}
                   {journals.length === 0 && (
