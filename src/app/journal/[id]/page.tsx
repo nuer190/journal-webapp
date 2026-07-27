@@ -28,6 +28,8 @@ import {
 import { ArrowLeft, Info, Copy, Check, Database, BookOpen, Calendar, FileText } from "lucide-react";
 import { useState } from "react";
 
+type SourceKey = "abdc" | "ajg" | "scimago" | "scopus";
+
 const TIER_COLORS: Record<number, string> = {
   1: "bg-primary/10 text-primary border-primary/20",
   2: "bg-indigo-50 text-indigo-700 border-indigo-200",
@@ -36,6 +38,7 @@ const TIER_COLORS: Record<number, string> = {
   5: "bg-zinc-50 text-zinc-400 border-zinc-200",
 };
 
+// 1. Mapping ให้รองรับ Rank ของ ABDC (A*, A, B, C), AJG (4*, 4, 3, 2, 1), Scimago (Q1, Q2, Q3, Q4)
 const TIER_MAP: Record<string, number> = {
   "4*": 1,
   "A*": 2, "4": 2, "Q1": 2,
@@ -52,11 +55,27 @@ const TIER_DESCRIPTIONS: Record<number, string> = {
   5: "Standard",
 };
 
-const SOURCE_ACCENTS: Record<string, string> = {
-  abdc: "border-l-[#5B3B8C] bg-muted/30",
-  ajg: "border-l-[#7C5CBF] bg-muted/30",
-  scimago: "border-l-[#6366f1] bg-muted/30",
-  scopus: "border-l-[#0891b2] bg-muted/30",
+const SOURCE_LABELS: Record<SourceKey, string> = {
+  abdc: "ABDC",
+  ajg: "AJG",
+  scimago: "Scimago",
+  scopus: "Scopus",
+};
+
+// 2. กำหนดสีตาม Palette ของแต่ละ Database
+// ABDC: สีฟ้า | AJG: สีม่วง | Scimago: สีส้ม | Scopus: สีเขียว
+const SOURCE_ACCENTS: Record<SourceKey, string> = {
+  abdc: "border-l-sky-500 bg-sky-50/40",
+  ajg: "border-l-purple-500 bg-purple-50/40",
+  scimago: "border-l-amber-500 bg-amber-50/40",
+  scopus: "border-l-emerald-500 bg-emerald-50/40",
+};
+
+const SOURCE_BADGE_COLORS: Record<SourceKey, string> = {
+  abdc: "bg-sky-100 text-sky-700 border-sky-300 hover:bg-sky-200",
+  ajg: "bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200",
+  scimago: "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200",
+  scopus: "bg-emerald-100 text-emerald-700 border-emerald-300 hover:bg-emerald-200",
 };
 
 function hasValue(value: string | string[] | null | undefined): boolean {
@@ -65,23 +84,25 @@ function hasValue(value: string | string[] | null | undefined): boolean {
   return value.trim() !== "";
 }
 
-function RankBadge({ value, isBest }: { value: string | null; isBest?: boolean }) {
+// 3. ปรับ RankBadge ให้ดึงสีจาก source ประจำ Database นั้นๆ
+function RankBadge({ value, source }: { value: string | null; source?: SourceKey }) {
   if (!value || !value.trim()) {
     return <span className="text-muted-foreground">N/A</span>;
   }
   const trimmed = value.trim();
   const tier = TIER_MAP[trimmed] ?? 5;
-  const color = isBest ? 'bg-primary text-primary-foreground' : (TIER_COLORS[tier] ?? TIER_COLORS[5]);
   const description = TIER_DESCRIPTIONS[tier] ?? "Standard";
+
+  const colorClass = source
+    ? SOURCE_BADGE_COLORS[source]
+    : (TIER_COLORS[tier] ?? TIER_COLORS[5]);
 
   return (
     <HoverCard>
       <HoverCardTrigger>
         <Badge 
           variant="outline" 
-          className={`text-xs font-medium cursor-help ${color} ${
-            isBest ? 'ring-2 ring-primary ring-offset-2' : ''
-          }`}
+          className={`text-xs font-medium cursor-help ${colorClass}`}
         >
           {trimmed}
         </Badge>
@@ -92,7 +113,6 @@ function RankBadge({ value, isBest }: { value: string | null; isBest?: boolean }
           <div className="text-xs">
             <span className="font-medium">Tier {tier}:</span>{" "}
             <span className="text-muted-foreground">{description}</span>
-            {isBest && <span className="ml-2 text-primary font-medium">★ Best</span>}
           </div>
         </div>
       </HoverCardContent>
@@ -151,8 +171,6 @@ function AreaList({ value }: { value: string | string[] | null }) {
   );
 }
 
-type SourceKey = "abdc" | "ajg" | "scimago" | "scopus";
-
 interface JournalData {
   id: number;
   journal_title: string;
@@ -188,13 +206,6 @@ interface JournalData {
     adjustment_reason: string | null;
   } | null;
 }
-
-const SOURCE_LABELS: Record<SourceKey, string> = {
-  abdc: "ABDC",
-  ajg: "AJG",
-  scimago: "Scimago",
-  scopus: "Scopus",
-};
 
 function getVisibleSources(journal: {
   abdc: { abdc_area: string | null; rating_2025: string | null } | null;
@@ -267,15 +278,22 @@ function DataCompletenessIndicator({ journal }: { journal: JournalData }) {
             <div>
               <p className="text-sm font-medium">Indexed in {count}/4 databases</p>
               <div className="flex gap-1.5 mt-1">
-                {(["abdc", "ajg", "scimago", "scopus"] as SourceKey[]).map((source) => (
-                  <Badge
-                    key={source}
-                    variant={sources.includes(source) ? "default" : "outline"}
-                    className={sources.includes(source) ? "bg-primary" : "opacity-50"}
-                  >
-                    {SOURCE_LABELS[source]}
-                  </Badge>
-                ))}
+                {(["abdc", "ajg", "scimago", "scopus"] as SourceKey[]).map((source) => {
+                  const isIndexed = sources.includes(source);
+                  return (
+                    <Badge
+                      key={source}
+                      variant="outline"
+                      className={
+                        isIndexed
+                          ? SOURCE_BADGE_COLORS[source]
+                          : "opacity-40 bg-gray-50 text-gray-400 border-gray-200"
+                      }
+                    >
+                      {SOURCE_LABELS[source]}
+                    </Badge>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -466,11 +484,12 @@ function QuickActions({ journal }: { journal: JournalData }) {
   );
 }
 
+// 4. ตาราง Understanding Rank Tiers ด้านล่าง ปรับ Badge สีตาม Source
 function RankTierReference() {
   return (
     <Card>
       <Accordion className="w-full">
-        <AccordionItem>
+        <AccordionItem value="understanding-rank-tiers">
           <AccordionTrigger className="px-6">
             <div className="flex items-center gap-2">
               <Info className="h-5 w-5" />
@@ -494,7 +513,7 @@ function RankTierReference() {
                     <Badge variant="outline" className={TIER_COLORS[1]}>1</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">—</TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[1]}>4*</Badge></TableCell>
+                  <TableCell><RankBadge value="4*" source="ajg" /></TableCell>
                   <TableCell className="text-muted-foreground">—</TableCell>
                   <TableCell className="text-muted-foreground">Highest prestige</TableCell>
                 </TableRow>
@@ -502,36 +521,36 @@ function RankTierReference() {
                   <TableCell>
                     <Badge variant="outline" className={TIER_COLORS[2]}>2</Badge>
                   </TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[2]}>A*</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[2]}>4</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[2]}>Q1</Badge></TableCell>
+                  <TableCell><RankBadge value="A*" source="abdc" /></TableCell>
+                  <TableCell><RankBadge value="4" source="ajg" /></TableCell>
+                  <TableCell><RankBadge value="Q1" source="scimago" /></TableCell>
                   <TableCell className="text-muted-foreground">Excellent</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
                     <Badge variant="outline" className={TIER_COLORS[3]}>3</Badge>
                   </TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[3]}>A</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[3]}>3</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[3]}>Q2</Badge></TableCell>
+                  <TableCell><RankBadge value="A" source="abdc" /></TableCell>
+                  <TableCell><RankBadge value="3" source="ajg" /></TableCell>
+                  <TableCell><RankBadge value="Q2" source="scimago" /></TableCell>
                   <TableCell className="text-muted-foreground">Very Good</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
                     <Badge variant="outline" className={TIER_COLORS[4]}>4</Badge>
                   </TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[4]}>B</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[4]}>2</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[4]}>Q3</Badge></TableCell>
+                  <TableCell><RankBadge value="B" source="abdc" /></TableCell>
+                  <TableCell><RankBadge value="2" source="ajg" /></TableCell>
+                  <TableCell><RankBadge value="Q3" source="scimago" /></TableCell>
                   <TableCell className="text-muted-foreground">Good</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
                     <Badge variant="outline" className={TIER_COLORS[5]}>5</Badge>
                   </TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[5]}>C</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[5]}>1</Badge></TableCell>
-                  <TableCell><Badge variant="outline" className={TIER_COLORS[5]}>Q4</Badge></TableCell>
+                  <TableCell><RankBadge value="C" source="abdc" /></TableCell>
+                  <TableCell><RankBadge value="1" source="ajg" /></TableCell>
+                  <TableCell><RankBadge value="Q4" source="scimago" /></TableCell>
                   <TableCell className="text-muted-foreground">Standard</TableCell>
                 </TableRow>
               </TableBody>
@@ -635,23 +654,7 @@ export default function JournalDetailPage() {
                 </p>
               );
             }
-            
-            // Determine best rank across all sources
-            const ranks: { source: SourceKey; tier: number }[] = [];
-            if (visibleSources.includes("abdc")) {
-              const val = journal.abdc?.rating_2025?.trim();
-              if (val) ranks.push({ source: "abdc", tier: TIER_MAP[val] ?? 5 });
-            }
-            if (visibleSources.includes("ajg")) {
-              const val = journal.ajg?.ajg_2024_rating?.trim();
-              if (val) ranks.push({ source: "ajg", tier: TIER_MAP[val] ?? 5 });
-            }
-            if (visibleSources.includes("scimago")) {
-              const val = journal.scimago?.sjr_best_quartile?.trim();
-              if (val) ranks.push({ source: "scimago", tier: TIER_MAP[val] ?? 5 });
-            }
-            const bestTier = ranks.length > 0 ? Math.min(...ranks.map(r => r.tier)) : null;
-            
+
             const renderCell = (source: SourceKey, row: "area" | "rank" | "active") => {
               if (row === "area") {
                 if (source === "abdc") return <AreaList value={journal.abdc?.abdc_area ?? null} />;
@@ -661,25 +664,20 @@ export default function JournalDetailPage() {
               }
               if (row === "rank") {
                 if (source === "abdc") {
-                  const val = journal.abdc?.rating_2025?.trim();
-                  const tier = val ? (TIER_MAP[val] ?? 5) : null;
-                  return <RankBadge value={journal.abdc?.rating_2025 ?? null} isBest={tier !== null && tier === bestTier} />;
+                  return <RankBadge value={journal.abdc?.rating_2025 ?? null} source="abdc" />;
                 }
                 if (source === "ajg") {
-                  const val = journal.ajg?.ajg_2024_rating?.trim();
-                  const tier = val ? (TIER_MAP[val] ?? 5) : null;
-                  return <RankBadge value={journal.ajg?.ajg_2024_rating ?? null} isBest={tier !== null && tier === bestTier} />;
+                  return <RankBadge value={journal.ajg?.ajg_2024_rating ?? null} source="ajg" />;
                 }
                 if (source === "scimago") {
-                  const val = journal.scimago?.sjr_best_quartile?.trim();
-                  const tier = val ? (TIER_MAP[val] ?? 5) : null;
-                  return <RankBadge value={journal.scimago?.sjr_best_quartile ?? null} isBest={tier !== null && tier === bestTier} />;
+                  return <RankBadge value={journal.scimago?.sjr_best_quartile ?? null} source="scimago" />;
                 }
                 return <span className="text-muted-foreground">N/A</span>;
               }
               if (source === "scopus") return <StatusBadge value={journal.scopus?.active_status ?? null} />;
               return <span className="text-muted-foreground">N/A</span>;
             };
+
             return (
               <Table>
                 <TableHeader>
