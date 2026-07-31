@@ -7,7 +7,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { sourceConfig } from "../lib/chart-config";
-import { PieLegend, PIE_COLORS } from "./pie-legend";
+import { PieLegend } from "./pie-legend";
 import {
   PIE_CHART_LABEL_MARGIN,
   PIE_LABEL_LINE_COLOR,
@@ -19,17 +19,48 @@ interface Props {
   bySourceType: { type: string; count: number }[];
 }
 
+const SCOPUS_COLOR_MAP: Record<string, string> = {
+  // Status
+  active: "#22c55e",       // เขียว
+  inactive: "#ef4444",     // แดง
+  discontinued: "#ef4444", // แดง
+  
+  // Source Type
+  journal: "#22c55e",      // เขียว
+  "book series": "#854d0e",// น้ำตาล
+  book: "#854d0e",         // น้ำตาล
+  "trade journal": "#38bdf8", // ฟ้า
+  "trade publication": "#38bdf8",
+};
+
 export function ScopusStatusChart({ byStatus, bySourceType }: Props) {
+  const getItemColor = (name: string) => {
+    const key = name.toLowerCase().trim();
+    return SCOPUS_COLOR_MAP[key] || "#94a3b8";
+  };
+
+  const statusItems = byStatus.map((d) => ({
+    name: d.status,
+    count: d.count,
+    fill: getItemColor(d.status),
+  }));
+
+  const sourceTypeItems = bySourceType.map((d) => ({
+    name: d.type,
+    count: d.count,
+    fill: getItemColor(d.type),
+  }));
+
   const panels = [
     {
       key: "status",
       label: "Active Status",
-      items: byStatus.map((d) => ({ name: d.status, count: d.count })),
+      items: statusItems,
     },
     {
       key: "sourceType",
       label: "Source Type",
-      items: bySourceType.map((d) => ({ name: d.type, count: d.count })),
+      items: sourceTypeItems,
     },
   ];
 
@@ -57,8 +88,8 @@ export function ScopusStatusChart({ byStatus, bySourceType }: Props) {
                 label={renderPieSliceLabel}
                 labelLine={{ stroke: PIE_LABEL_LINE_COLOR, strokeWidth: 1 }}
               >
-                {panel.items.map((_, index) => (
-                  <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                {panel.items.map((entry, index) => (
+                  <Cell key={index} fill={entry.fill} />
                 ))}
               </Pie>
             </PieChart>

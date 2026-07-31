@@ -1,12 +1,12 @@
 "use client";
 
-import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { sourceConfig, CHART_COLORS } from "../lib/chart-config";
+import { sourceConfig } from "../lib/chart-config";
 import { formatCount, horizontalBarHeight, truncateLabel } from "../lib/chart-sizing";
 import { useCategoryAxis } from "../hooks/use-category-axis";
 
@@ -18,14 +18,25 @@ export function AreaGroupChart({ data }: Props) {
   const config = sourceConfig(data.map((d) => d.name));
   const axis = useCategoryAxis({ width: 180, chars: 26, fontSize: 13 });
 
+  // เรียงข้อมูลจากมากไปน้อย
+  const sortedData = [...data].sort((a, b) => b.count - a.count);
+
+  // คำนวณความสว่าง (Lightness)
+  const getColor = (index: number, total: number) => {
+    const minL = 35; // เข้มสุด
+    const maxL = 75; // อ่อนสุด
+    const lightness = total > 1 ? minL + (index / (total - 1)) * (maxL - minL) : minL;
+    return `hsl(271, 81%, ${lightness}%)`;
+  };
+
   return (
     <ChartContainer
       config={config}
       className="aspect-auto w-full"
-      style={{ height: horizontalBarHeight(data.length) }}
+      style={{ height: horizontalBarHeight(sortedData.length) }}
     >
       <BarChart
-        data={data}
+        data={sortedData}
         layout="vertical"
         margin={{ top: 8, right: 64, bottom: 8, left: 8 }}
       >
@@ -42,10 +53,12 @@ export function AreaGroupChart({ data }: Props) {
         <ChartTooltip content={<ChartTooltipContent />} />
         <Bar
           dataKey="count"
-          fill={CHART_COLORS.secondary}
           radius={[0, 4, 4, 0]}
           maxBarSize={28}
         >
+          {sortedData.map((_, index) => (
+            <Cell key={index} fill={getColor(index, sortedData.length)} />
+          ))}
           <LabelList
             dataKey="count"
             position="right"

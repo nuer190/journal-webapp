@@ -7,7 +7,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { sourceConfig } from "../lib/chart-config";
-import { PieLegend, PIE_COLORS } from "./pie-legend";
+import { PieLegend } from "./pie-legend";
 import {
   PIE_CHART_LABEL_MARGIN,
   PIE_LABEL_LINE_COLOR,
@@ -18,8 +18,22 @@ interface Props {
   data: { name: string; count: number }[];
 }
 
+const SOURCE_COLORS: Record<string, string> = {
+  abdc: "#38bdf8",    // ฟ้า
+  ajg: "#a855f7",     // ม่วง
+  scimago: "#f97316", // ส้ม
+  scopus: "#22c55e",  // เขียว
+};
+
 export function SourceDistribution({ data }: Props) {
   const config = sourceConfig(data.map((d) => d.name));
+
+  // แมปสีตามชื่อ Source
+  const dataWithColors = data.map((item) => {
+    const key = item.name.toLowerCase();
+    const fill = SOURCE_COLORS[key] || "#94a3b8";
+    return { ...item, fill };
+  });
 
   return (
     <div className="flex flex-col items-center gap-8 lg:flex-row lg:justify-center lg:gap-16">
@@ -30,7 +44,7 @@ export function SourceDistribution({ data }: Props) {
         <PieChart margin={PIE_CHART_LABEL_MARGIN}>
           <ChartTooltip content={<ChartTooltipContent hideLabel />} />
           <Pie
-            data={data}
+            data={dataWithColors}
             dataKey="count"
             nameKey="name"
             innerRadius={100}
@@ -40,13 +54,13 @@ export function SourceDistribution({ data }: Props) {
             label={renderPieSliceLabel}
             labelLine={{ stroke: PIE_LABEL_LINE_COLOR, strokeWidth: 1 }}
           >
-            {data.map((_, index) => (
-              <Cell key={index} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+            {dataWithColors.map((entry, index) => (
+              <Cell key={index} fill={entry.fill} />
             ))}
           </Pie>
         </PieChart>
       </ChartContainer>
-      <PieLegend items={data} className="w-full max-w-[340px]" />
+      <PieLegend items={dataWithColors} className="w-full max-w-[340px]" />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   ChartTooltipContent,
   ChartLegendContent,
 } from "@/components/ui/chart";
-import { CHART_COLORS, sourceConfig } from "../lib/chart-config";
+import { sourceConfig } from "../lib/chart-config";
 import { formatCount, truncateLabel } from "../lib/chart-sizing";
 
 interface Props {
@@ -43,7 +43,9 @@ export function DbCoverageChart({ data }: Props) {
         <YAxis tick={{ fontSize: 13 }} tickFormatter={formatCount} />
         <ChartTooltip content={<ChartTooltipContent />} />
         <Legend content={<ChartLegendContent />} />
-        <Bar dataKey="ABDC" stackId="coverage" fill={CHART_COLORS.primary} maxBarSize={80}>
+        
+        {/* ABDC - สีฟ้า */}
+        <Bar dataKey="ABDC" stackId="coverage" fill="#38bdf8" maxBarSize={80}>
           <LabelList
             dataKey="ABDC"
             position="center"
@@ -53,7 +55,9 @@ export function DbCoverageChart({ data }: Props) {
             formatter={segmentLabel}
           />
         </Bar>
-        <Bar dataKey="AJG" stackId="coverage" fill={CHART_COLORS.secondary} maxBarSize={80}>
+
+        {/* AJG - สีม่วง */}
+        <Bar dataKey="AJG" stackId="coverage" fill="#a855f7" maxBarSize={80}>
           <LabelList
             dataKey="AJG"
             position="center"
@@ -63,7 +67,9 @@ export function DbCoverageChart({ data }: Props) {
             formatter={segmentLabel}
           />
         </Bar>
-        <Bar dataKey="Scimago" stackId="coverage" fill={CHART_COLORS.tertiary} maxBarSize={80}>
+
+        {/* Scimago - สีส้ม */}
+        <Bar dataKey="Scimago" stackId="coverage" fill="#f97316" maxBarSize={80}>
           <LabelList
             dataKey="Scimago"
             position="center"
@@ -73,7 +79,9 @@ export function DbCoverageChart({ data }: Props) {
             formatter={segmentLabel}
           />
         </Bar>
-        <Bar dataKey="Scopus" stackId="coverage" fill={CHART_COLORS.quaternary} maxBarSize={80}>
+
+        {/* Scopus - สีเขียว */}
+        <Bar dataKey="Scopus" stackId="coverage" fill="#22c55e" maxBarSize={80}>
           <LabelList
             dataKey="Scopus"
             position="center"
