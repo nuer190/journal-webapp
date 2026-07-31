@@ -16,13 +16,22 @@ type CsvRow = Record<string, string>;
 
 function readCsv(filename: string): CsvRow[] {
   const content = readFileSync(path.join(CSV_DIR, filename), "utf-8");
-  return parse(content, { columns: true, skip_empty_lines: true, relaxColumnCount: true });
+  return parse(content, { 
+    columns: true, 
+    skip_empty_lines: true, 
+    relaxColumnCount: true,
+    bom: true // ลบ character BOM ป้องกัน Header ตัวแรกเพี้ยน
+  });
+}
+
+function cleanString(val: string | undefined | null): string | null {
+  if (!val) return null;
+  const trimmed = val.trim();
+  return trimmed === "" ? null : trimmed;
 }
 
 function emptyToNull(val: string | undefined): string | null {
-  if (val === undefined || val === null) return null;
-  const trimmed = val.trim();
-  return trimmed === "" ? null : trimmed;
+  return cleanString(val);
 }
 
 function toInt(val: string | undefined): number | null {
@@ -35,15 +44,17 @@ function toInt(val: string | undefined): number | null {
 async function seedJournalMain() {
   const rows = readCsv("ABDC_DB.csv");
   for (const row of rows) {
+    const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
     await prisma.jOURNAL_MAIN.upsert({
-      where: { id: parseInt(row.id, 10) },
+      where: { id },
       update: {
-        journal_title: row.journal_title.trim(),
+        journal_title: row.journal_title?.trim() ?? "",
         publisher: emptyToNull(row.publisher),
       },
       create: {
-        id: parseInt(row.id, 10),
-        journal_title: row.journal_title.trim(),
+        id,
+        journal_title: row.journal_title?.trim() ?? "",
         publisher: emptyToNull(row.publisher),
       },
     });
@@ -54,8 +65,10 @@ async function seedJournalMain() {
 async function seedAbdc() {
   const rows = readCsv("ABDC_DB.csv");
   for (const row of rows) {
+    const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
     await prisma.aBDC_DB.upsert({
-      where: { id: parseInt(row.id, 10) },
+      where: { id },
       update: {
         issn_print: emptyToNull(row.issn_print),
         issn_online: emptyToNull(row.issn_online),
@@ -66,7 +79,7 @@ async function seedAbdc() {
         notes: emptyToNull(row.notes),
       },
       create: {
-        id: parseInt(row.id, 10),
+        id,
         issn_print: emptyToNull(row.issn_print),
         issn_online: emptyToNull(row.issn_online),
         year_inception: toInt(row.year_inception),
@@ -84,6 +97,7 @@ async function seedAjg() {
   const rows = readCsv("AJG_DB.csv");
   for (const row of rows) {
     const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
     await prisma.aJG_DB.upsert({
       where: { id },
       update: {
@@ -110,6 +124,7 @@ async function seedScimago() {
   const rows = readCsv("SCIMAGO_DB.csv");
   for (const row of rows) {
     const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
     await prisma.sCIMAGO_DB.upsert({
       where: { id },
       update: {
@@ -141,6 +156,7 @@ async function seedScopus() {
 
   for (const row of rows) {
     const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
 
     await prisma.sCOPUS_DB.upsert({
       where: { id },
@@ -174,6 +190,7 @@ async function seedNote() {
   const rows = readCsv("NOTE_DB.csv");
   for (const row of rows) {
     const id = parseInt(row.id, 10);
+    if (isNaN(id)) continue;
     await prisma.nOTE_DB.upsert({
       where: { id },
       update: {
@@ -198,20 +215,27 @@ async function seedNote() {
 
 async function seedJournalArea() {
   const rows = readCsv("journal_area.csv");
-  const data = rows.map(row => ({
-    journal_title: row.journal_title.trim(),
-    issn_print: emptyToNull(row.issn_print),
-    issn_online: emptyToNull(row.issn_online),
-    source: row.source.trim(),
-    area: emptyToNull(row.area),
-    rank: emptyToNull(row.rank),
-    active_status: emptyToNull(row.active_status),
-    source_type: emptyToNull(row.source_type),
-    best_rank: emptyToNull(row.best_rank),
-    area_group: emptyToNull(row.area_group),
-    major_group: row.major_group.trim(),
+  const validRows = rows.filter(row => row && Object.keys(row).length > 0);
+
+  const data = validRows.map(row => ({
+    journal_title: row.journal_title?.trim() ?? "", 
+    issn_print: cleanString(row.issn_print),
+    issn_online: cleanString(row.issn_online),
+    source: row.source?.trim() ?? "",
+    area: cleanString(row.area),
+    rank: cleanString(row.rank),
+    active_status: cleanString(row.active_status),
+    source_type: cleanString(row.source_type),
+    best_rank: cleanString(row.best_rank),
+    area_group: cleanString(row.area_group),
+    major_group: row.major_group?.trim() ?? "",
   }));
-  await prisma.journal_area.createMany({ data });
+
+  await prisma.journal_area.createMany({ 
+    data,
+    skipDuplicates: true,
+  });
+  
   console.log(`Seeded ${data.length} journal_area rows`);
 }
 
@@ -220,16 +244,17 @@ async function seedArea() {
   const uniqueAreas = new Set<string>();
   
   for (const row of rows) {
-    const area = emptyToNull(row.area);
+    const area = cleanString(row.area);
     if (area) {
       uniqueAreas.add(area);
     }
   }
   
   await prisma.aREA.createMany({
-    data: [...uniqueAreas].map(areaName => ({ area_name: areaName })),
+    data: Array.from(uniqueAreas).map(areaName => ({ area_name: areaName })),
     skipDuplicates: true,
   });
+  
   console.log(`Seeded ${uniqueAreas.size} AREA rows`);
 }
 
@@ -239,21 +264,25 @@ async function seedJournalAreaDetail() {
   const journals = await prisma.jOURNAL_MAIN.findMany({
     select: { id: true, journal_title: true },
   });
-  const titleToId = new Map(journals.map(j => [j.journal_title, j.id]));
+  const titleToId = new Map(
+    journals.filter(j => j.journal_title).map(j => [j.journal_title.trim(), j.id])
+  );
   
   const areas = await prisma.aREA.findMany({
     select: { area_id: true, area_name: true },
   });
-  const nameToId = new Map(areas.map(a => [a.area_name, a.area_id]));
+  const nameToId = new Map(
+    areas.filter(a => a.area_name).map(a => [a.area_name.trim(), a.area_id])
+  );
   
   const pairs = new Set<string>();
   const data = [];
   
   for (const row of rows) {
-    const title = row.journal_title.trim();
-    const area = emptyToNull(row.area);
+    const title = row.journal_title?.trim();
+    const area = cleanString(row.area);
     
-    if (!area) continue;
+    if (!title || !area) continue;
     
     const journalId = titleToId.get(title);
     const areaId = nameToId.get(area);
@@ -270,10 +299,12 @@ async function seedJournalAreaDetail() {
     });
   }
   
-  await prisma.jOURNAL_AREA_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_AREA_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_AREA_DETAIL rows`);
 }
 
@@ -282,14 +313,14 @@ async function seedAreaGroup() {
   const uniqueAreaGroups = new Set<string>();
   
   for (const row of rows) {
-    const areaGroup = emptyToNull(row.area_group);
+    const areaGroup = cleanString(row.area_group);
     if (areaGroup) {
       uniqueAreaGroups.add(areaGroup);
     }
   }
   
   await prisma.aREA_GROUP.createMany({
-    data: [...uniqueAreaGroups].map(name => ({ area_group_name: name })),
+    data: Array.from(uniqueAreaGroups).map(name => ({ area_group_name: name })),
     skipDuplicates: true,
   });
   console.log(`Seeded ${uniqueAreaGroups.size} AREA_GROUP rows`);
@@ -301,21 +332,25 @@ async function seedJournalAreaGroupDetail() {
   const journals = await prisma.jOURNAL_MAIN.findMany({
     select: { id: true, journal_title: true },
   });
-  const titleToId = new Map(journals.map(j => [j.journal_title, j.id]));
+  const titleToId = new Map(
+    journals.filter(j => j.journal_title).map(j => [j.journal_title.trim(), j.id])
+  );
   
   const areaGroups = await prisma.aREA_GROUP.findMany({
     select: { area_group_id: true, area_group_name: true },
   });
-  const nameToId = new Map(areaGroups.map(ag => [ag.area_group_name, ag.area_group_id]));
+  const nameToId = new Map(
+    areaGroups.filter(ag => ag.area_group_name).map(ag => [ag.area_group_name.trim(), ag.area_group_id])
+  );
   
   const pairs = new Set<string>();
   const data = [];
   
   for (const row of rows) {
-    const title = row.journal_title.trim();
-    const areaGroup = emptyToNull(row.area_group);
+    const title = row.journal_title?.trim();
+    const areaGroup = cleanString(row.area_group);
     
-    if (!areaGroup) continue;
+    if (!title || !areaGroup) continue;
     
     const journalId = titleToId.get(title);
     const areaGroupId = nameToId.get(areaGroup);
@@ -332,10 +367,12 @@ async function seedJournalAreaGroupDetail() {
     });
   }
   
-  await prisma.jOURNAL_AREA_GROUP_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_AREA_GROUP_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_AREA_GROUP_DETAIL rows`);
 }
 
@@ -344,14 +381,14 @@ async function seedMajorGroup() {
   const uniqueMajorGroups = new Set<string>();
   
   for (const row of rows) {
-    const majorGroup = row.major_group?.trim();
+    const majorGroup = cleanString(row.major_group);
     if (majorGroup) {
       uniqueMajorGroups.add(majorGroup);
     }
   }
   
   await prisma.mAJOR_GROUP.createMany({
-    data: [...uniqueMajorGroups].map(name => ({ major_group_name: name })),
+    data: Array.from(uniqueMajorGroups).map(name => ({ major_group_name: name })),
     skipDuplicates: true,
   });
   console.log(`Seeded ${uniqueMajorGroups.size} MAJOR_GROUP rows`);
@@ -363,21 +400,25 @@ async function seedJournalMajorGroupDetail() {
   const journals = await prisma.jOURNAL_MAIN.findMany({
     select: { id: true, journal_title: true },
   });
-  const titleToId = new Map(journals.map(j => [j.journal_title, j.id]));
+  const titleToId = new Map(
+    journals.filter(j => j.journal_title).map(j => [j.journal_title.trim(), j.id])
+  );
   
   const majorGroups = await prisma.mAJOR_GROUP.findMany({
     select: { major_group_id: true, major_group_name: true },
   });
-  const nameToId = new Map(majorGroups.map(mg => [mg.major_group_name, mg.major_group_id]));
+  const nameToId = new Map(
+    majorGroups.filter(mg => mg.major_group_name).map(mg => [mg.major_group_name.trim(), mg.major_group_id])
+  );
   
   const pairs = new Set<string>();
   const data = [];
   
   for (const row of rows) {
-    const title = row.journal_title.trim();
-    const majorGroup = row.major_group?.trim();
+    const title = row.journal_title?.trim();
+    const majorGroup = cleanString(row.major_group);
     
-    if (!majorGroup) continue;
+    if (!title || !majorGroup) continue;
     
     const journalId = titleToId.get(title);
     const majorGroupId = nameToId.get(majorGroup);
@@ -394,10 +435,12 @@ async function seedJournalMajorGroupDetail() {
     });
   }
   
-  await prisma.jOURNAL_MAJOR_GROUP_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_MAJOR_GROUP_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_MAJOR_GROUP_DETAIL rows`);
 }
 
@@ -445,7 +488,7 @@ async function seedScopusArea() {
   }
 
   await prisma.sCOPUS_AREA.createMany({
-    data: [...uniqueAreas].map(areaName => ({ scopus_area_name: areaName })),
+    data: Array.from(uniqueAreas).map(areaName => ({ scopus_area_name: areaName })),
     skipDuplicates: true,
   });
   console.log(`Seeded ${uniqueAreas.size} SCOPUS_AREA rows`);
@@ -472,7 +515,7 @@ async function seedScopusAreaGroup() {
   }
 
   await prisma.sCOPUS_AREA_GROUP.createMany({
-    data: [...uniqueAreaGroups].map(name => ({ scopus_area_group_name: name })),
+    data: Array.from(uniqueAreaGroups).map(name => ({ scopus_area_group_name: name })),
     skipDuplicates: true,
   });
   console.log(`Seeded ${uniqueAreaGroups.size} SCOPUS_AREA_GROUP rows`);
@@ -484,14 +527,14 @@ async function seedScopusMajorGroup() {
 
   for (const row of rows) {
     if (row.source?.trim() !== "Scopus") continue;
-    const majorGroup = row.major_group?.trim();
+    const majorGroup = cleanString(row.major_group);
     if (majorGroup) {
       uniqueMajorGroups.add(majorGroup);
     }
   }
 
   await prisma.sCOPUS_MAJOR_GROUP.createMany({
-    data: [...uniqueMajorGroups].map(name => ({ scopus_major_group_name: name })),
+    data: Array.from(uniqueMajorGroups).map(name => ({ scopus_major_group_name: name })),
     skipDuplicates: true,
   });
   console.log(`Seeded ${uniqueMajorGroups.size} SCOPUS_MAJOR_GROUP rows`);
@@ -533,7 +576,9 @@ async function seedJournalScopusAreaDetail() {
   const areas = await prisma.sCOPUS_AREA.findMany({
     select: { scopus_area_id: true, scopus_area_name: true },
   });
-  const nameToId = new Map(areas.map(a => [a.scopus_area_name, a.scopus_area_id]));
+  const nameToId = new Map(
+    areas.filter(a => a.scopus_area_name).map(a => [a.scopus_area_name.trim(), a.scopus_area_id])
+  );
 
   const pairs = new Set<string>();
   const data = [];
@@ -559,10 +604,12 @@ async function seedJournalScopusAreaDetail() {
     }
   }
 
-  await prisma.jOURNAL_SCOPUS_AREA_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_SCOPUS_AREA_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_SCOPUS_AREA_DETAIL rows`);
 }
 
@@ -579,7 +626,9 @@ async function seedJournalScopusAreaGroupDetail() {
   const areaGroups = await prisma.sCOPUS_AREA_GROUP.findMany({
     select: { scopus_area_group_id: true, scopus_area_group_name: true },
   });
-  const nameToId = new Map(areaGroups.map(ag => [ag.scopus_area_group_name, ag.scopus_area_group_id]));
+  const nameToId = new Map(
+    areaGroups.filter(ag => ag.scopus_area_group_name).map(ag => [ag.scopus_area_group_name.trim(), ag.scopus_area_group_id])
+  );
 
   const pairs = new Set<string>();
   const data = [];
@@ -605,10 +654,12 @@ async function seedJournalScopusAreaGroupDetail() {
     }
   }
 
-  await prisma.jOURNAL_SCOPUS_AREA_GROUP_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_SCOPUS_AREA_GROUP_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_SCOPUS_AREA_GROUP_DETAIL rows`);
 }
 
@@ -618,12 +669,16 @@ async function seedJournalScopusMajorGroupDetail() {
   const journals = await prisma.jOURNAL_MAIN.findMany({
     select: { id: true, journal_title: true },
   });
-  const titleToId = new Map(journals.map(j => [j.journal_title, j.id]));
+  const titleToId = new Map(
+    journals.filter(j => j.journal_title).map(j => [j.journal_title.trim(), j.id])
+  );
 
   const majorGroups = await prisma.sCOPUS_MAJOR_GROUP.findMany({
     select: { scopus_major_group_id: true, scopus_major_group_name: true },
   });
-  const nameToId = new Map(majorGroups.map(mg => [mg.scopus_major_group_name, mg.scopus_major_group_id]));
+  const nameToId = new Map(
+    majorGroups.filter(mg => mg.scopus_major_group_name).map(mg => [mg.scopus_major_group_name.trim(), mg.scopus_major_group_id])
+  );
 
   const pairs = new Set<string>();
   const data = [];
@@ -631,10 +686,10 @@ async function seedJournalScopusMajorGroupDetail() {
   for (const row of rows) {
     if (row.source?.trim() !== "Scopus") continue;
 
-    const title = row.journal_title.trim();
-    const majorGroup = row.major_group?.trim();
+    const title = row.journal_title?.trim();
+    const majorGroup = cleanString(row.major_group);
 
-    if (!majorGroup) continue;
+    if (!title || !majorGroup) continue;
 
     const journalId = titleToId.get(title);
     const majorGroupId = nameToId.get(majorGroup);
@@ -651,10 +706,12 @@ async function seedJournalScopusMajorGroupDetail() {
     });
   }
 
-  await prisma.jOURNAL_SCOPUS_MAJOR_GROUP_DETAIL.createMany({
-    data,
-    skipDuplicates: true,
-  });
+  if (data.length > 0) {
+    await prisma.jOURNAL_SCOPUS_MAJOR_GROUP_DETAIL.createMany({
+      data,
+      skipDuplicates: true,
+    });
+  }
   console.log(`Seeded ${data.length} JOURNAL_SCOPUS_MAJOR_GROUP_DETAIL rows`);
 }
 

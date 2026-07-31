@@ -38,7 +38,6 @@ const TIER_COLORS: Record<number, string> = {
   5: "bg-zinc-50 text-zinc-400 border-zinc-200",
 };
 
-// 1. Mapping ให้รองรับ Rank ของ ABDC (A*, A, B, C), AJG (4*, 4, 3, 2, 1), Scimago (Q1, Q2, Q3, Q4)
 const TIER_MAP: Record<string, number> = {
   "4*": 1,
   "A*": 2, "4": 2, "Q1": 2,
@@ -62,13 +61,18 @@ const SOURCE_LABELS: Record<SourceKey, string> = {
   scopus: "Scopus",
 };
 
-// 2. กำหนดสีตาม Palette ของแต่ละ Database
-// ABDC: สีฟ้า | AJG: สีม่วง | Scimago: สีส้ม | Scopus: สีเขียว
 const SOURCE_ACCENTS: Record<SourceKey, string> = {
   abdc: "border-l-sky-500 bg-sky-50/40",
   ajg: "border-l-purple-500 bg-purple-50/40",
   scimago: "border-l-amber-500 bg-amber-50/40",
   scopus: "border-l-emerald-500 bg-emerald-50/40",
+};
+
+const SOURCE_ROW_BG: Record<SourceKey, string> = {
+  abdc: "bg-sky-50/70 hover:bg-sky-100/70 text-sky-950",
+  ajg: "bg-purple-50/70 hover:bg-purple-100/70 text-purple-950",
+  scimago: "bg-amber-50/70 hover:bg-amber-100/70 text-amber-950",
+  scopus: "bg-emerald-50/70 hover:bg-emerald-100/70 text-emerald-950",
 };
 
 const SOURCE_BADGE_COLORS: Record<SourceKey, string> = {
@@ -80,14 +84,13 @@ const SOURCE_BADGE_COLORS: Record<SourceKey, string> = {
 
 function hasValue(value: string | string[] | null | undefined): boolean {
   if (value === null || value === undefined) return false;
-  if (Array.isArray(value)) return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0 && value.some((v) => v && v.trim() !== "");
   return value.trim() !== "";
 }
 
-// 3. ปรับ RankBadge ให้ดึงสีจาก source ประจำ Database นั้นๆ
 function RankBadge({ value, source }: { value: string | null; source?: SourceKey }) {
   if (!value || !value.trim()) {
-    return <span className="text-muted-foreground">N/A</span>;
+    return <span className="text-muted-foreground">—</span>;
   }
   const trimmed = value.trim();
   const tier = TIER_MAP[trimmed] ?? 5;
@@ -122,7 +125,7 @@ function RankBadge({ value, source }: { value: string | null; source?: SourceKey
 
 function StatusBadge({ value }: { value: string | null }) {
   if (!value || !value.trim()) {
-    return <span className="text-muted-foreground">N/A</span>;
+    return <span className="text-muted-foreground">—</span>;
   }
   const trimmed = value.trim().toLowerCase();
   
@@ -140,23 +143,9 @@ function StatusBadge({ value }: { value: string | null }) {
   );
 }
 
-function AreaList({ value }: { value: string | string[] | null }) {
-  if (!hasValue(value)) {
-    return <span className="text-muted-foreground">N/A</span>;
-  }
-
-  let items: string[] = [];
-  if (Array.isArray(value)) {
-    items = value.filter(v => v.trim()).map(v => v.trim());
-  } else if (typeof value === "string") {
-    items = value
-      .split(/[,;|]/)
-      .map(v => v.trim())
-      .filter(v => v.length > 0);
-  }
-
-  if (items.length === 0) {
-    return <span className="text-muted-foreground">N/A</span>;
+function AreaList({ items }: { items: string[] }) {
+  if (!items || items.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
   }
 
   return (
@@ -171,72 +160,132 @@ function AreaList({ value }: { value: string | string[] | null }) {
   );
 }
 
+// ---------------- Interfaces ----------------
+
+interface AreaDetail {
+  area: string;
+  area_group: string | null;
+  major_group: string | null;
+  rank: string | null;
+}
+
+interface ABDCData {
+  id: number;
+  issn_print: string | null;
+  issn_online: string | null;
+  year_inception?: number | null;
+  for_code?: number | null;
+  abdc_area: string | null;
+  rating_2025: string | null;
+  notes?: string | null;
+  area_details: AreaDetail[];
+}
+
+interface AJGData {
+  id: number;
+  ajg_match_key?: string | null;
+  ajg_issn?: string | null;
+  ajg_title?: string | null;
+  ajg_subject_area: string | null;
+  ajg_2024_rating: string | null;
+  area_details: AreaDetail[];
+}
+
+interface SCIMAGOData {
+  id: number;
+  scimago_issn?: string | null;
+  scimago_eissn?: string | null;
+  scimago_title?: string | null;
+  sjr_best_quartile: string | null;
+  scimago_categories?: string | null;
+  scimago_match_key?: string | null;
+  scimago_areas: string | null;
+  area_details: AreaDetail[];
+}
+
+interface SCOPUSData {
+  active_status: string | null;
+  coverage_years: string | null;
+  source_type: string | null;
+  discontinued: string | null;
+  area_details: AreaDetail[];
+}
+
+interface NoteData {
+  id: number;
+  note_primary: string | null;
+  note_secondary_1: string | null;
+  note_secondary_2: string | null;
+  note_secondary_3: string | null;
+  adjustment_reason: string | null;
+}
+
 interface JournalData {
   id: number;
   journal_title: string;
   publisher: string | null;
-  abdc: {
-    abdc_area: string | null;
-    rating_2025: string | null;
-    issn_print: string | null;
-    issn_online: string | null;
-  } | null;
-  ajg: {
-    ajg_subject_area: string | null;
-    ajg_2024_rating: string | null;
-  } | null;
-  scimago: {
-    scimago_areas: string | null;
-    sjr_best_quartile: string | null;
-  } | null;
-  scopus: {
-    active_status: string | null;
-    coverage_years: string | null;
-    source_type: string | null;
-    discontinued: string | null;
-    areas: string[];
-    area_groups: string[];
-    major_groups: string[];
-  } | null;
-  note: {
-    note_primary: string | null;
-    note_secondary_1: string | null;
-    note_secondary_2: string | null;
-    note_secondary_3: string | null;
-    adjustment_reason: string | null;
-  } | null;
+  abdc: ABDCData | null;
+  ajg: AJGData | null;
+  scimago: SCIMAGOData | null;
+  scopus: SCOPUSData | null;
+  note: NoteData | null;
+  error?: string;
 }
 
-function getVisibleSources(journal: {
-  abdc: { abdc_area: string | null; rating_2025: string | null } | null;
-  ajg: { ajg_subject_area: string | null; ajg_2024_rating: string | null } | null;
-  scimago: { scimago_areas: string | null; sjr_best_quartile: string | null } | null;
-  scopus: {
-    active_status: string | null;
-    areas: string[];
-  } | null;
-}): SourceKey[] {
-  const sources: { key: SourceKey; values: (string | string[] | null)[] }[] = [
-    {
-      key: "abdc",
-      values: [journal.abdc?.abdc_area ?? null, journal.abdc?.rating_2025 ?? null, null],
-    },
-    {
-      key: "ajg",
-      values: [journal.ajg?.ajg_subject_area ?? null, journal.ajg?.ajg_2024_rating ?? null, null],
-    },
-    {
-      key: "scimago",
-      values: [journal.scimago?.scimago_areas ?? null, journal.scimago?.sjr_best_quartile ?? null, null],
-    },
-    {
-      key: "scopus",
-      values: [journal.scopus?.areas ?? null, null, journal.scopus?.active_status ?? null],
-    },
-  ];
-  return sources
-    .filter((s) => s.values.some((v) => hasValue(v)))
-    .map((s) => s.key);
+interface AreaRowDetail {
+  source: SourceKey;
+  majorGroup: string | null;
+  areaGroup: string | null;
+  area: string | null;
+  rank: React.ReactNode;
+}
+
+// ตรวจสอบ Source ที่มีข้อมูล
+function getVisibleSources(journal: JournalData): SourceKey[] {
+  const visibleSet = new Set<SourceKey>();
+
+  if (journal.abdc && journal.abdc.area_details && journal.abdc.area_details.length > 0) {
+    visibleSet.add("abdc");
+  }
+  if (journal.ajg && journal.ajg.area_details && journal.ajg.area_details.length > 0) {
+    visibleSet.add("ajg");
+  }
+  if (journal.scimago && journal.scimago.area_details && journal.scimago.area_details.length > 0) {
+    visibleSet.add("scimago");
+  }
+  if (journal.scopus && journal.scopus.area_details && journal.scopus.area_details.length > 0) {
+    visibleSet.add("scopus");
+  }
+
+  return Array.from(visibleSet);
+}
+
+// รวม Rows สำหรับ Area Details Breakdown
+function buildDetailedAreaRows(journal: JournalData): AreaRowDetail[] {
+  const rows: AreaRowDetail[] = [];
+  const sources: SourceKey[] = ["abdc", "ajg", "scimago", "scopus"];
+
+  sources.forEach((sourceKey) => {
+    const sourceData = journal[sourceKey];
+    if (sourceData && sourceData.area_details && sourceData.area_details.length > 0) {
+      sourceData.area_details.forEach((item) => {
+        const isScopus = sourceKey === "scopus";
+        rows.push({
+          source: sourceKey,
+          majorGroup: item.major_group || "—",
+          areaGroup: item.area_group || "—",
+          area: item.area || "—",
+          rank: isScopus ? (
+            <span className="text-muted-foreground">—</span>
+          ) : (
+            <RankBadge value={item.rank} source={sourceKey} />
+          ),
+        });
+      });
+    }
+  });
+
+  return rows;
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -249,17 +298,8 @@ function CopyButton({ text }: { text: string }) {
   };
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={handleCopy}
-      className="h-6 w-6 p-0"
-    >
-      {copied ? (
-        <Check className="h-3 w-3 text-green-600" />
-      ) : (
-        <Copy className="h-3 w-3" />
-      )}
+    <Button variant="ghost" size="sm" onClick={handleCopy} className="h-6 w-6 p-0">
+      {copied ? <Check className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3" />}
     </Button>
   );
 }
@@ -379,7 +419,12 @@ function NotesSection({ journal }: { journal: JournalData }) {
   const note = journal.note;
   if (!note) return null;
 
-  const hasAnyNote = note.note_primary || note.note_secondary_1 || note.note_secondary_2 || note.note_secondary_3 || note.adjustment_reason;
+  const hasAnyNote =
+    note.note_primary ||
+    note.note_secondary_1 ||
+    note.note_secondary_2 ||
+    note.note_secondary_3 ||
+    note.adjustment_reason;
   if (!hasAnyNote) return null;
 
   return (
@@ -484,11 +529,10 @@ function QuickActions({ journal }: { journal: JournalData }) {
   );
 }
 
-// 4. ตาราง Understanding Rank Tiers ด้านล่าง ปรับ Badge สีตาม Source
 function RankTierReference() {
   return (
     <Card>
-      <Accordion className="w-full">
+      <Accordion className="w-full" >
         <AccordionItem value="understanding-rank-tiers">
           <AccordionTrigger className="px-6">
             <div className="flex items-center gap-2">
@@ -575,13 +619,9 @@ export default function JournalDetailPage() {
   if (!isValidId || (journal && journal.error)) {
     return (
       <div className="space-y-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/area-explorer")}
-          className="gap-2"
-        >
+        <Button variant="ghost" onClick={() => router.back()} className="gap-2">
           <ArrowLeft className="h-4 w-4" />
-          Back to Area Explorer
+          Back
         </Button>
         <div className="flex flex-col items-center justify-center py-12">
           <p className="text-lg text-muted-foreground">Journal not found</p>
@@ -614,15 +654,33 @@ export default function JournalDetailPage() {
     );
   }
 
+  const detailedRows = buildDetailedAreaRows(journal);
+
+  // ดึง Best Rank ประจำ Source
+  const getBestRank = (source: SourceKey) => {
+    if (source === "abdc") return journal.abdc?.rating_2025 ?? null;
+    if (source === "ajg") return journal.ajg?.ajg_2024_rating ?? null;
+    if (source === "scimago") return journal.scimago?.sjr_best_quartile ?? null;
+    if (source === "scopus") return null; // Scopus ไม่มี Rank
+    return null;
+  };
+
+  // ดึงรายการ Area ทั้งหมดจาก area_details
+  const getSourceAreas = (source: SourceKey): string[] => {
+    const sourceData = journal[source];
+    if (sourceData && Array.isArray(sourceData.area_details)) {
+      return (sourceData.area_details as Array<{ area: string }>)
+        .map((item) => item.area)
+        .filter(Boolean);
+    }
+    return [];
+  };
+
   return (
     <div className="space-y-6">
-      <Button
-        variant="ghost"
-        onClick={() => router.push("/area-explorer")}
-        className="gap-2"
-      >
+      <Button variant="ghost" onClick={() => router.back()} className="gap-2">
         <ArrowLeft className="h-4 w-4" />
-        Back to Area Explorer
+        Back
       </Button>
 
       <div>
@@ -638,6 +696,7 @@ export default function JournalDetailPage() {
 
       <JournalIdentifiers journal={journal} />
 
+      {/* 1. Cross-Source Comparison */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">
@@ -655,27 +714,24 @@ export default function JournalDetailPage() {
               );
             }
 
-            const renderCell = (source: SourceKey, row: "area" | "rank" | "active") => {
+            const renderCell = (source: SourceKey, row: "area" | "best_rank" | "active") => {
               if (row === "area") {
-                if (source === "abdc") return <AreaList value={journal.abdc?.abdc_area ?? null} />;
-                if (source === "ajg") return <AreaList value={journal.ajg?.ajg_subject_area ?? null} />;
-                if (source === "scimago") return <AreaList value={journal.scimago?.scimago_areas ?? null} />;
-                return <AreaList value={journal.scopus?.areas ?? null} />;
+                return <AreaList items={getSourceAreas(source)} />;
               }
-              if (row === "rank") {
-                if (source === "abdc") {
-                  return <RankBadge value={journal.abdc?.rating_2025 ?? null} source="abdc" />;
+              if (row === "best_rank") {
+                if (source === "scopus") {
+                  return <span className="text-muted-foreground">—</span>;
                 }
-                if (source === "ajg") {
-                  return <RankBadge value={journal.ajg?.ajg_2024_rating ?? null} source="ajg" />;
-                }
-                if (source === "scimago") {
-                  return <RankBadge value={journal.scimago?.sjr_best_quartile ?? null} source="scimago" />;
-                }
-                return <span className="text-muted-foreground">N/A</span>;
+                const bestRank = getBestRank(source);
+                return <RankBadge value={bestRank} source={source} />;
               }
-              if (source === "scopus") return <StatusBadge value={journal.scopus?.active_status ?? null} />;
-              return <span className="text-muted-foreground">N/A</span>;
+              if (row === "active") {
+                if (source === "scopus") {
+                  return <StatusBadge value={journal.scopus?.active_status ?? null} />;
+                }
+                return <span className="text-muted-foreground">—</span>;
+              }
+              return <span className="text-muted-foreground">—</span>;
             };
 
             return (
@@ -698,9 +754,9 @@ export default function JournalDetailPage() {
                     ))}
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">Rank</TableCell>
+                    <TableCell className="font-medium">Best Rank</TableCell>
                     {visibleSources.map((s) => (
-                      <TableCell key={s}>{renderCell(s, "rank")}</TableCell>
+                      <TableCell key={s}>{renderCell(s, "best_rank")}</TableCell>
                     ))}
                   </TableRow>
                   <TableRow>
@@ -713,6 +769,61 @@ export default function JournalDetailPage() {
               </Table>
             );
           })()}
+        </CardContent>
+      </Card>
+
+      {/* 2. Area Details Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="font-heading text-xl">
+            Area Details Breakdown
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detailedRows.length === 0 ? (
+            <p className="text-center text-muted-foreground py-6">
+              No area details available.
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-md border border-border">
+              <Table>
+                <TableHeader className="bg-muted/50">
+                  <TableRow>
+                    <TableHead className="w-[50px] text-center">#</TableHead>
+                    <TableHead className="w-[120px] font-semibold">Source</TableHead>
+                    <TableHead className="font-semibold">Major Group</TableHead>
+                    <TableHead className="font-semibold">Area Group</TableHead>
+                    <TableHead className="font-semibold">Area</TableHead>
+                    <TableHead className="w-[100px] font-semibold">Rank</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {detailedRows.map((row, index) => (
+                    <TableRow key={index} className={`${SOURCE_ROW_BG[row.source]} transition-colors`}>
+                      <TableCell className="text-center font-mono text-xs text-muted-foreground">
+                        {index + 1}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {SOURCE_LABELS[row.source]}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.majorGroup ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {row.areaGroup ?? "—"}
+                      </TableCell>
+                      <TableCell className="text-sm font-medium">
+                        {row.area ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        {row.rank}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
