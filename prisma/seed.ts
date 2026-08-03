@@ -3,7 +3,12 @@ import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { readFileSync } from "fs";
 import { parse } from "csv-parse/sync";
+import { SCOPUS_AREA_COLUMNS } from "./constants/areaMapping";
+import { ABDC_FOR_MAPPING } from "./constants/areaMapping";
 import path from "path";
+import pg from "pg";
+import * as XLSX from "xlsx";
+import cliProgress from 'cli-progress';
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL!,
@@ -213,30 +218,41 @@ async function seedNote() {
   console.log(`Seeded ${rows.length} NOTE_DB rows`);
 }
 
+function getJournalTitle(row: CsvRow): string {
+  const raw = row.journal_title || row.Journal_Title || row["Journal Title"] || row.journalTitle || row.title || "";
+  return raw.trim();
+}
+
 async function seedJournalArea() {
   const rows = readCsv("journal_area.csv");
   const validRows = rows.filter(row => row && Object.keys(row).length > 0);
 
-  const data = validRows.map(row => ({
-    journal_title: row.journal_title?.trim() ?? "", 
-    issn_print: cleanString(row.issn_print),
-    issn_online: cleanString(row.issn_online),
-    source: row.source?.trim() ?? "",
-    area: cleanString(row.area),
-    rank: cleanString(row.rank),
-    active_status: cleanString(row.active_status),
-    source_type: cleanString(row.source_type),
-    best_rank: cleanString(row.best_rank),
-    area_group: cleanString(row.area_group),
-    major_group: row.major_group?.trim() ?? "",
-  }));
+  const data = validRows.map(row => {
+    const rawTitle = row.journal_title || row.Journal_Title || row["Journal Title"] || row.journalTitle || row.title || "";
+    
+    return {
+      journal_title: rawTitle.trim(), 
+      issn_print: cleanString(row.issn_print || row.ISSN_Print || row["ISSN Print"]),
+      issn_online: cleanString(row.issn_online || row.ISSN_Online || row["ISSN Online"]),
+      source: (row.source || row.Source || "").trim(),
+      area: cleanString(row.area || row.Area),
+      rank: cleanString(row.rank || row.Rank),
+      active_status: cleanString(row.active_status || row["Active Status"]),
+      source_type: cleanString(row.source_type || row["Source Type"]),
+      best_rank: cleanString(row.best_rank || row["Best Rank"]),
+      area_group: cleanString(row.area_group || row["Area Group"]),
+      major_group: (row.major_group || row["Major Group"] || "").trim(),
+    };
+  });
+
+  const filteredData = data.filter(item => item.journal_title !== "");
 
   await prisma.journal_area.createMany({ 
-    data,
+    data: filteredData,
     skipDuplicates: true,
   });
   
-  console.log(`Seeded ${data.length} journal_area rows`);
+  console.log(`Seeded ${filteredData.length} journal_area rows`);
 }
 
 async function seedArea() {
@@ -715,28 +731,671 @@ async function seedJournalScopusMajorGroupDetail() {
   console.log(`Seeded ${data.length} JOURNAL_SCOPUS_MAJOR_GROUP_DETAIL rows`);
 }
 
+// ==========================================
+// FILE PATHS & CONSTANTS
+// ==========================================
+const FILE_PATHS = {
+  ABDC: 'D:\\coding file\\journal-app\\prisma\\seeds\\data\\ABDC-JQL-2025-v2-270526.xlsx',
+  SCOPUS: 'D:\\coding file\\journal-app\\prisma\\seeds\\data\\ext_list_May_2026.xlsx',
+  SCIMAGO: 'D:\\coding file\\journal-app\\prisma\\seeds\\data\\Scimagojr2025.xlsx',
+  AJG: 'D:\\coding file\\journal-app\\prisma\\seeds\\data\\JQL-72_subject.xlsx',
+};
+
+const FOR_MAPPING: Record<number, string> = {
+  3501: "Accounting, auditing and accountability",
+  3502: "Banking, finance and investment",
+  3503: "Business systems in context",
+  3504: "Commercial services",
+  3505: "Human resources and industrial relations",
+  3506: "Marketing",
+  3507: "Strategy, management and organisational behaviour",
+  3508: "Tourism",
+  3509: "Transportation, logistics and supply chains",
+  3599: "Other commerce, management, tourism and services",
+  3801: "Applied economics",
+  3802: "Econometrics",
+  3803: "Economic history",
+  3899: "Other economics",
+  4609: "Information systems",
+  4801: "Commercial law",
+  4905: "Statistics"
+};
+
+// ==========================================
+// AREA GROUP & MAJOR GROUP MAPPINGS
+// ==========================================
+const AREA_GROUP_MAP: Record<string, string[]> = {
+  "Business, Management and Accounting": [
+    "Accounting", "Business, Management and Accounting", "Business and International Management",
+    "Business, Management and Accounting (miscellaneous)", "General Business, Management and Accounting",
+    "Strategy, management and organisational behaviour", "Industrial Relations", "Management Information Systems",
+    "Management of Technology and Innovation", "Marketing", "Human Resource Management",
+    "Accounting, auditing and accountability", "Organizational Behavior and Human Resource Management",
+    "Organization Behavior/Studies", "Strategy and Management", "HRM/IR",
+    "Tourism, Leisure and Hospitality Management", "Tourism", "Entrepreneurship"
+  ],
+  "Agricultural and Biological Sciences": [
+    "Agricultural and Biological Sciences (miscellaneous)", "Agricultural and Biological Sciences",
+    "Agronomy and Crop Science", "Animal Science and Zoology", "Aquatic Science",
+    "Ecology, Evolution, Behavior and Systematics", "Food Science", "Forestry",
+    "General Agricultural and Biological Sciences", "Horticulture", "Insect Science",
+    "Plant Science", "Soil Science"
+  ],
+  "Arts and Humanities": [
+    "Archeology (arts and humanities)", "Arts and Humanities (miscellaneous)", "Classics", "Conservation",
+    "General Arts and Humanities", "Business History", "Arts and Humanities", "History",
+    "History and Philosophy of Science", "Language and Linguistics", "Literature and Literary Theory",
+    "Museology", "Music", "Philosophy", "Religious Studies", "Visual Arts and Performing Arts"
+  ],
+  "Biochemistry, Genetics and Molecular Biology": [
+    "Aging", "Biochemistry", "Biochemistry, Genetics and Molecular Biology (miscellaneous)", "Biophysics",
+    "Biotechnology", "Biochemistry, Genetics and Molecular Biology", "Cancer Research", "Cell Biology",
+    "Clinical Biochemistry", "Developmental Biology", "Endocrinology",
+    "General Biochemistry, Genetics and Molecular Biology", "Genetics", "Molecular Biology",
+    "Molecular Medicine", "Physiology", "Structural Biology"
+  ],
+  "Chemical Engineering": [
+    "Bioengineering", "Catalysis", "Chemical Engineering (miscellaneous)", "Chemical Engineering",
+    "Chemical Health and Safety", "Colloid and Surface Chemistry", "Filtration and Separation",
+    "Fluid Flow and Transfer Processes", "General Chemical Engineering", "Process Chemistry and Technology"
+  ],
+  "Chemistry": [
+    "Analytical Chemistry", "Chemistry (miscellaneous)", "Electrochemistry", "General Chemistry",
+    "Inorganic Chemistry", "Organic Chemistry", "Physical and Theoretical Chemistry", "Spectroscopy"
+  ],
+  "Computer Science": [
+    "Artificial Intelligence", "Computational Theory and Mathematics", "Computer Graphics and Computer-Aided Design",
+    "Computer Networks and Communications", "Computer Science (miscellaneous)", "Computer Science",
+    "Computer Science Applications", "Computer Vision and Pattern Recognition", "General Computer Science",
+    "Hardware and Architecture", "Human-Computer Interaction", "Information Systems", "Information systems",
+    "Signal Processing", "Software"
+  ],
+  "Decision Sciences": [
+    "Decision Sciences (miscellaneous)", "Management Science", "General Decision Sciences",
+    "Production & Operations Management", "Decision Sciences", "Operations Research",
+    "Information Systems and Management", "Management Science and Operations Research",
+    "Statistics, Probability and Uncertainty"
+  ],
+  "Dentistry": [
+    "Dental Assisting", "Dental Hygiene", "Dentistry (miscellaneous)", "General Dentistry",
+    "Oral Surgery", "Orthodontics", "Periodontics"
+  ],
+  "Earth and Planetary Sciences": [
+    "Atmospheric Science", "Computers in Earth Sciences", "Earth and Planetary Sciences (miscellaneous)",
+    "Earth and Planetary Sciences", "Earth-Surface Processes", "Economic Geology", "General Earth and Planetary Sciences",
+    "Geochemistry and Petrology", "Geology", "Geophysics", "Geotechnical Engineering and Engineering Geology",
+    "Oceanography", "Paleontology", "Space and Planetary Science", "Stratigraphy"
+  ],
+  "Economics, Econometrics and Finance": [
+    "Economics and Econometrics", "Economics, Econometrics and Finance (miscellaneous)",
+    "Economics, Econometrics and Finance", "Finance", "General Economics, Econometrics and Finance",
+    "Economics", "Finance & Accounting", "Economic history", "Other economics",
+    "Banking, finance and investment", "Econometrics", "Applied economics", "Economics;"
+  ],
+  "Energy": [
+    "Energy (miscellaneous)", "Energy Engineering and Power Technology", "Fuel Technology",
+    "General Energy", "Energy", "Nuclear Energy and Engineering", "Renewable Energy, Sustainability and the Environment"
+  ],
+  "Engineering": [
+    "Aerospace Engineering", "Architecture", "Engineering", "Automotive Engineering", "Biomedical Engineering",
+    "Building and Construction", "Civil and Structural Engineering", "Computational Mechanics",
+    "Control and Systems Engineering", "Electrical and Electronic Engineering", "Engineering (miscellaneous)",
+    "General Engineering", "Environmental Science", "Industrial and Manufacturing Engineering",
+    "Mechanical Engineering", "Mechanics of Materials", "Media Technology", "Ocean Engineering",
+    "Safety, Risk, Reliability and Quality", "Operations Research & Management Science"
+  ],
+  "Environmental Science": [
+    "Ecological Modeling", "Ecology", "Environmental Chemistry", "Environmental Engineering",
+    "Environmental Science (miscellaneous)", "General Environmental Science", "Global and Planetary Change",
+    "Health, Toxicology and Mutagenesis", "Management, Monitoring, Policy and Law",
+    "Nature and Landscape Conservation", "Pollution", "Waste Management and Disposal",
+    "Water Science and Technology"
+  ],
+  "Health Professions": [
+    "Chiropractics", "Complementary and Manual Therapy", "Emergency Medical Services", "General Health Professions",
+    "Health Information Management", "Health Professions (miscellaneous)", "Medical Assisting and Transcription",
+    "Medical Laboratory Technology", "Medical Terminology", "Occupational Therapy", "Sports Science",
+    "Health Professions", "Optometry", "Pharmacy", "Physical Therapy, Sports Therapy and Rehabilitation",
+    "Podiatry", "Radiological and Ultrasound Technology", "Respiratory Care", "Speech and Hearing"
+  ],
+  "Immunology and Microbiology": [
+    "Applied Microbiology and Biotechnology", "General Immunology and Microbiology", "Immunology",
+    "Immunology and Microbiology (miscellaneous)", "Microbiology", "Parasitology", "Virology"
+  ],
+  "Materials Science": [
+    "Biomaterials", "Ceramics and Composites", "Electronic, Optical and Magnetic Materials",
+    "General Materials Science", "Materials Chemistry", "Materials Science (miscellaneous)",
+    "Metals and Alloys", "Polymers and Plastics", "Surfaces, Coatings and Films"
+  ],
+  "Mathematics": [
+    "Algebra and Number Theory", "Analysis", "Applied Mathematics", "Mathematics", "Computational Mathematics",
+    "Control and Optimization", "Discrete Mathematics and Combinatorics", "General Mathematics",
+    "Geometry and Topology", "Logic", "Mathematical Physics", "Mathematics (miscellaneous)",
+    "Modeling and Simulation", "Numerical Analysis", "Statistics and Probability",
+    "Theoretical Computer Science", "Statistics"
+  ],
+  "Medicine": [
+    "Anatomy", "Anesthesiology and Pain Medicine", "Biochemistry (medical)", "Cardiology and Cardiovascular Medicine",
+    "Complementary and Alternative Medicine", "Critical Care and Intensive Care Medicine", "Dermatology",
+    "Drug Guides", "Medicine", "Embryology", "Emergency Medicine", "Endocrinology, Diabetes and Metabolism",
+    "Epidemiology", "Family Practice", "Gastroenterology", "General Medicine", "Genetics (clinical)",
+    "Geriatrics and Gerontology", "Health Informatics", "Health Policy", "Hematology", "Hepatology",
+    "Histology", "Immunology and Allergy", "Infectious Diseases", "Internal Medicine",
+    "Medicine (miscellaneous)", "Microbiology (medical)", "Nephrology", "Neurology (clinical)",
+    "Obstetrics and Gynecology", "Oncology", "Ophthalmology", "Orthopedics and Sports Medicine",
+    "Otorhinolaryngology", "Pathology and Forensic Medicine", "Pediatrics, Perinatology and Child Health",
+    "Pharmacology (medical)", "Physiology (medical)", "Psychiatry and Mental Health",
+    "Public Health, Environmental and Occupational Health", "Pulmonary and Respiratory Medicine",
+    "Radiology, Nuclear Medicine and Imaging", "Rehabilitation", "Reproductive Medicine",
+    "Reviews and References (medical)", "Rheumatology", "Surgery", "Transplantation", "Urology"
+  ],
+  "Multidisciplinary": ["Multidisciplinary"],
+  "Neuroscience": [
+    "Behavioral Neuroscience", "Biological Psychiatry", "Cellular and Molecular Neuroscience",
+    "Cognitive Neuroscience", "Developmental Neuroscience", "Endocrine and Autonomic Systems",
+    "General Neuroscience", "Neurology", "Neuroscience (miscellaneous)", "Neuroscience", "Sensory Systems"
+  ],
+  "Nursing": [
+    "Advanced and Specialized Nursing", "Assessment and Diagnosis", "Care Planning", "Community and Home Care",
+    "Critical Care Nursing", "Emergency Nursing", "Fundamentals and Skills", "General Nursing", "Gerontology",
+    "Issues, Ethics and Legal Aspects", "LPN and LVN", "Leadership and Management", "Maternity and Midwifery",
+    "Medical and Surgical Nursing", "Nurse Assisting", "Nursing", "Nursing (miscellaneous)", "Nutrition and Dietetics",
+    "Oncology (nursing)", "Pathophysiology", "Pediatrics", "Pharmacology (nursing)", "Psychiatric Mental Health",
+    "Research and Theory", "Review and Exam Preparation"
+  ],
+  "Pharmacology, Toxicology and Pharmaceutics": [
+    "Drug Discovery", "General Pharmacology, Toxicology and Pharmaceutics",
+    "Pharmacology, Toxicology and Pharmaceutics", "Pharmaceutical Science", "Pharmacology",
+    "Pharmacology, Toxicology and Pharmaceutics (miscellaneous)", "Toxicology"
+  ],
+  "Physics and Astronomy": [
+    "Acoustics and Ultrasonics", "Astronomy and Astrophysics", "Atomic and Molecular Physics, and Optics",
+    "Condensed Matter Physics", "General Physics and Astronomy", "Instrumentation",
+    "Nuclear and High Energy Physics", "Physics and Astronomy (miscellaneous)", "Radiation",
+    "Statistical and Nonlinear Physics", "Surfaces and Interfaces"
+  ],
+  "Psychology": [
+    "Applied Psychology", "Clinical Psychology", "Developmental and Educational Psychology",
+    "Experimental and Cognitive Psychology", "General Psychology",
+    "Neuropsychology and Physiological Psychology", "Psychology (miscellaneous)", "Social Psychology",
+    "Psychology, Organization Behavior/Studies", "Psychology"
+  ],
+  "Social Sciences": [
+    "Anthropology", "Archeology", "Communication", "Cultural Studies", "Social Sciences", "Social Work",
+    "Demography", "Development", "Education", "E-learning", "Gender Studies", "General Social Sciences",
+    "Geography, Planning and Development", "Health (social science)", "Human Factors and Ergonomics", "Law",
+    "Library and Information Sciences", "Life-span and Life-course Studies", "Linguistics and Language",
+    "Political Science and International Relations", "Public Administration", "Safety Research",
+    "Social Sciences (miscellaneous)", "Sociology and Political Science", "Transportation", "Urban Studies",
+    "Human resources and industrial relations", "Commercial law", "Sociology"
+  ],
+  "Veterinary": [
+    "Equine", "Food Animals", "General Veterinary", "Small Animals", "Veterinary (miscellaneous)"
+  ],
+  "General": [
+    "General & Strategy", "Innovation", "International Business",
+    "Management Information Systems, Knowledge Management",
+    "Operations Research, Management Science, Production & Operations Management",
+    "Organization Behavior/Studies, Human Resource Management, Industrial Relations",
+    "Public Sector Management", "Business systems in context", "Knowledge Management",
+    "Commercial services", "Other commerce, management, tourism and services",
+    "Transportation, logistics and supply chains"
+  ]
+};
+
+// Create Case-Insensitive Reverse Lookup Table
+const REVERSE_AREA_GROUP_MAP: Record<string, string> = {};
+
+Object.entries(AREA_GROUP_MAP).forEach(([group, items]) => {
+  items.forEach((item) => {
+    // Clean ข้อมูล item:
+    // 1. ตัดเลข 4 หลักข้างหน้าออก (ถ้ามี)
+    // 2. แปลง \n หรือ \r ให้เป็น Space
+    // 3. Trim ช่องว่างส่วนเกิน และแปลงเป็น lowercase
+    const cleanItem = item
+      .replace(/^\d{4}\s*/, '')
+      .replace(/[\r\n]+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+    if (cleanItem) {
+      REVERSE_AREA_GROUP_MAP[cleanItem] = group;
+    }
+  });
+});
+
+const MAJOR_GROUP_MAP: Record<string, string> = {
+  "Business, Management and Accounting": "Business, Economics & Management",
+  "Economics, Econometrics and Finance": "Business, Economics & Management",
+  "Decision Sciences": "Business, Economics & Management",
+
+  "Computer Science": "Tech, Data & Quantitative Methods",
+  "Engineering": "Tech, Data & Quantitative Methods",
+  "Mathematics": "Tech, Data & Quantitative Methods",
+
+  "Social Sciences": "Social Sciences & Humanities",
+  "Psychology": "Social Sciences & Humanities",
+  "Arts and Humanities": "Social Sciences & Humanities",
+
+  "Medicine": "Healthcare & Medical Systems",
+  "Nursing": "Healthcare & Medical Systems",
+  "Health Professions": "Healthcare & Medical Systems",
+  "Pharmacology, Toxicology and Pharmaceutics": "Healthcare & Medical Systems",
+  "Neuroscience": "Healthcare & Medical Systems",
+
+  "Environmental Science": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Energy": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Agricultural and Biological Sciences": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Earth and Planetary Sciences": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Biochemistry, Genetics and Molecular Biology": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Chemical Engineering": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Materials Science": "Applied Sciences, Sustainability & Interdisciplinary",
+  "Multidisciplinary": "Applied Sciences, Sustainability & Interdisciplinary",
+  "General": "Applied Sciences, Sustainability & Interdisciplinary"
+};
+
+// ==========================================
+// UTILITY & HELPER FUNCTIONS
+// ==========================================
+function cleanIssn(issnVal: any): string[] {
+  if (!issnVal) return [];
+  const str = String(issnVal).replace(/-/g, '');
+  const matches = str.match(/[0-9X]{8}/gi);
+  return matches ? matches.map((i) => i.toUpperCase()) : [];
+}
+
+function readExcelFile(filePath: string) {
+  const workbook = XLSX.readFile(filePath);
+  const sheetName = workbook.SheetNames[0];
+  return XLSX.utils.sheet_to_json<Record<string, any>>(workbook.Sheets[sheetName]);
+}
+
+function deriveGroups(areaName: string) {
+  // Clean ชื่อที่ส่งมาจาก Excel ให้ตรง Format เดียวกับ REVERSE_AREA_GROUP_MAP
+  const cleanName = areaName
+    .replace(/^\d{4}\s*/, '')  // ตัดเลข 4 หลักข้างหน้าออก (ถ้ามี)
+    .replace(/[\r\n]+/g, ' ')   // แปลง \n ให้เป็นช่องว่าง
+    .trim()
+    .toLowerCase();
+
+  const areaGroup = REVERSE_AREA_GROUP_MAP[cleanName] || "General";
+  const majorGroup = MAJOR_GROUP_MAP[areaGroup] || "Applied Sciences, Sustainability & Interdisciplinary";
+
+  return { areaGroup, majorGroup };
+}
+
+async function saveJournalAreaMapping(
+  journalId: number,
+  sourceId: number,
+  areaName: string,
+  areaCode?: string
+) {
+  const trimmedAreaName = areaName.trim();
+  if (!trimmedAreaName) return;
+
+  const { areaGroup, majorGroup } = deriveGroups(trimmedAreaName);
+
+  // 1. Upsert Subject Area
+  const area = await prisma.nEW_SUBJECT_AREA.upsert({
+    where: {
+      source_id_area_name: {
+        source_id: sourceId,
+        area_name: trimmedAreaName
+      }
+    },
+    update: {
+      area_code: areaCode || undefined,
+      area_group: areaGroup,
+      major_group: majorGroup
+    },
+    create: {
+      source_id: sourceId,
+      area_code: areaCode || null,
+      area_name: trimmedAreaName,
+      area_group: areaGroup,
+      major_group: majorGroup
+    }
+  });
+
+  // 2. Upsert Journal Area Mapping (ตัด rank ออก)
+  await prisma.nEW_JOURNAL_AREA_MAPPING.upsert({
+    where: {
+      journal_id_subject_area_id: {
+        journal_id: journalId,
+        subject_area_id: area.id
+      }
+    },
+    update: {},
+    create: {
+      journal_id: journalId,
+      subject_area_id: area.id
+    }
+  });
+}
+
+async function findOrCreateJournal(title: string, publisher?: string, issns: string[] = []) {
+  if (issns.length > 0) {
+    const existingIssn = await prisma.nEW_JOURNAL_ISSN.findFirst({
+      where: { issn: { in: issns } },
+      select: { journal_id: true }
+    });
+    if (existingIssn) return existingIssn.journal_id;
+  }
+
+  const existingTitle = await prisma.nEW_JOURNAL.findFirst({
+    where: { journal_title: { equals: title, mode: 'insensitive' } },
+    select: { id: true }
+  });
+  if (existingTitle) return existingTitle.id;
+
+  const newJournal = await prisma.nEW_JOURNAL.create({
+    data: {
+      journal_title: title,
+      publisher: publisher || null
+    }
+  });
+
+  return newJournal.id;
+}
+
+async function saveIssns(journalId: number, issns: string[]) {
+  const printIssn = issns[0] || null;
+  const eIssn = issns[1] || null;
+
+  if (printIssn) {
+    await prisma.nEW_JOURNAL_ISSN.upsert({
+      where: { journal_id_issn: { journal_id: journalId, issn: printIssn } },
+      update: {},
+      create: { journal_id: journalId, issn: printIssn, issn_type: 'PRINT' }
+    });
+  }
+
+  if (eIssn) {
+    await prisma.nEW_JOURNAL_ISSN.upsert({
+      where: { journal_id_issn: { journal_id: journalId, issn: eIssn } },
+      update: {},
+      create: { journal_id: journalId, issn: eIssn, issn_type: 'ONLINE' }
+    });
+  }
+}
+
+// ==========================================
+// SEED SOURCE DATA
+// ==========================================
+async function seedNewSources() {
+  console.log('--- Seeding NEW_SOURCE ---');
+  const sources = [
+    { id: 1, source_name: 'Scopus' },
+    { id: 2, source_name: 'Scimago' },
+    { id: 3, source_name: 'AJG' },
+    { id: 4, source_name: 'ABDC' },
+  ];
+
+  for (const s of sources) {
+    await prisma.nEW_SOURCE.upsert({
+      where: { id: s.id },
+      update: { source_name: s.source_name },
+      create: s,
+    });
+  }
+}
+
+
+// Helper สร้าง Progress Bar
+function createProgressBar(title: string) {
+  return new cliProgress.SingleBar({
+    format: `${title.padEnd(8)} |{bar}| {percentage}% | {value}/{total} Rows | ETA: {eta}s`,
+    barCompleteChar: '\u2588',
+    barIncompleteChar: '\u2591',
+    hideCursor: true,
+    clearOnComplete: false
+  });
+}
+
+// Helper บันทึก Ranking แบบปลอดภัย (ไม่พึ่ง Unique Constraint)
+async function saveJournalRanking(journalId: number, sourceId: number, rankVal: string) {
+  if (!rankVal) return;
+  
+  // ลบข้อมูลเดิมของ journal + source นี้ออกก่อนสร้างใหม่
+  await prisma.nEW_JOURNAL_RANKING.deleteMany({
+    where: {
+      journal_id: journalId,
+      source_id: sourceId
+    }
+  });
+
+  await prisma.nEW_JOURNAL_RANKING.create({
+    data: {
+      journal_id: journalId,
+      source_id: sourceId,
+      rank_value: rankVal
+    }
+  });
+}
+
+// ==========================================
+// PROCESS EXCEL FILES WITH PROGRESS BAR
+// ==========================================
+async function processScopus(filePath: string) {
+  console.log('\n--- Processing Scopus ---');
+  console.time('Time - Scopus');
+  const rows = readExcelFile(filePath);
+
+  const progressBar = createProgressBar('Scopus');
+  progressBar.start(rows.length, 0);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const title = String(row['Source Title'] || '').trim();
+
+    if (title) {
+      const publisher = row['Publisher'] ? String(row['Publisher']).trim() : undefined;
+      const activeStatus = String(row['Active or Inactive'] || 'Active');
+      const issns = [...cleanIssn(row['ISSN']), ...cleanIssn(row['EISSN'])];
+
+      const journalId = await findOrCreateJournal(title, publisher, issns);
+      await saveIssns(journalId, issns);
+
+      await prisma.nEW_JOURNAL.update({
+        where: { id: journalId },
+        data: { active_status: activeStatus }
+      });
+
+      // ค้นหา Column ทั้งหมดใน Row นั้น
+      for (const rawColKey of Object.keys(row)) {
+        // 1. Clean ชื่อ Column: ลบ \n, \r และ trim ช่องว่าง
+        const cleanedColKey = rawColKey.replace(/[\r\n]+/g, ' ').trim();
+
+        // 2. เช็คว่าชื่อ Column ขึ้นต้นด้วย รหัสตัวเลข 4 หลัก หรือไม่
+        const match = cleanedColKey.match(/^(\d{4})\s+(.+)$/);
+
+        if (match) {
+          const areaCode = match[1]; // ได้ตัวเลข เช่น "1000"
+          const areaName = match[2].trim(); // ได้เฉพาะชื่อ เช่น "General" (ไม่มีตัวเลข)
+
+          // 3. ตรวจสอบว่า Cell นั้นมีข้อมูลหรือไม่ (ไม่เป็น null, undefined หรือ string ว่าง)
+          const cellValue = row[rawColKey];
+          if (cellValue !== undefined && cellValue !== null && String(cellValue).trim() !== '') {
+            // บันทึกเฉพาะ areaName ที่ไม่มีตัวเลขติดมา
+            await saveJournalAreaMapping(journalId, 1, areaName, areaCode);
+          }
+        }
+      }
+    }
+    progressBar.update(i + 1);
+  }
+
+  progressBar.stop();
+  console.timeEnd('Time - Scopus');
+}
+
+async function processScimago(filePath: string) {
+  console.log('\n--- Processing Scimago ---');
+  console.time('Time - Scimago');
+  const rows = readExcelFile(filePath);
+
+  const progressBar = createProgressBar('Scimago');
+  progressBar.start(rows.length, 0);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const title = String(row['Title'] || '').trim();
+    if (title) {
+      const publisher = row['Publisher'] ? String(row['Publisher']).trim() : undefined;
+      const issns = cleanIssn(row['Issn']);
+
+      const journalId = await findOrCreateJournal(title, publisher, issns);
+      await saveIssns(journalId, issns);
+
+      const catStr = String(row['Scimago_Categories'] || '');
+      if (catStr) {
+        const categories = catStr.split(';');
+        for (const cat of categories) {
+          const match = cat.trim().match(/^(.*?)\s*\((Q[1-4])\)$/);
+          if (match) {
+            const areaName = match[1].trim();
+            const rankVal = match[2].trim();
+
+            await saveJournalAreaMapping(journalId, 2, areaName);
+            await saveJournalRanking(journalId, 2, rankVal);
+          } else {
+            const areaName = cat.trim();
+            if (areaName) {
+              await saveJournalAreaMapping(journalId, 2, areaName);
+            }
+          }
+        }
+      }
+    }
+    progressBar.update(i + 1);
+  }
+
+  progressBar.stop();
+  console.timeEnd('Time - Scimago');
+}
+
+async function processAjg(filePath: string) {
+  console.log('\n--- Processing AJG ---');
+  console.time('Time - AJG');
+  const rows = readExcelFile(filePath);
+
+  const progressBar = createProgressBar('AJG');
+  progressBar.start(rows.length, 0);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const title = String(row['Journal'] || '').trim();
+    if (title) {
+      const issns = cleanIssn(row['ISSN']);
+      const areaName = String(row['Subject area AJG2024 lowest]'] || '').trim();
+      const rankVal = String(row['AJG 2024 4*-1'] || '').trim();
+
+      const journalId = await findOrCreateJournal(title, undefined, issns);
+      await saveIssns(journalId, issns);
+
+      if (areaName) {
+        await saveJournalAreaMapping(journalId, 3, areaName);
+      }
+
+      if (rankVal) {
+        await saveJournalRanking(journalId, 3, rankVal);
+      }
+    }
+    progressBar.update(i + 1);
+  }
+
+  progressBar.stop();
+  console.timeEnd('Time - AJG');
+}
+
+async function processAbdc(filePath: string) {
+  console.log('\n--- Processing ABDC ---');
+  console.time('Time - ABDC');
+  const rows = readExcelFile(filePath);
+
+  const progressBar = createProgressBar('ABDC');
+  progressBar.start(rows.length, 0);
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const title = String(row['Journal Title'] || '').trim();
+    if (title) {
+      const publisher = row['Publisher'] ? String(row['Publisher']).trim() : undefined;
+      const issns = [...cleanIssn(row['ISSN']), ...cleanIssn(row['ISSN Online'])];
+      const forCode = parseInt(row['FoR'], 10);
+      const rankVal = String(row['2025 Rating'] || '').trim();
+
+      const journalId = await findOrCreateJournal(title, publisher, issns);
+      await saveIssns(journalId, issns);
+
+      if (!isNaN(forCode) && FOR_MAPPING[forCode]) {
+        const areaName = FOR_MAPPING[forCode];
+        await saveJournalAreaMapping(journalId, 4, areaName, String(forCode));
+      }
+
+      if (rankVal) {
+        await saveJournalRanking(journalId, 4, rankVal);
+      }
+    }
+    progressBar.update(i + 1);
+  }
+
+  progressBar.stop();
+  console.timeEnd('Time - ABDC');
+}
+
+// ==========================================
+// MAIN EXECUTION
+// ==========================================
 async function main() {
   console.log("Seeding database...");
-  await seedJournalMain();
-  await seedAbdc();
-  await seedAjg();
-  await seedScimago();
-  await seedScopus();
-  await seedNote();
-  await seedJournalArea();
-  await seedArea();
-  await seedJournalAreaDetail();
-  await seedAreaGroup();
-  await seedJournalAreaGroupDetail();
-  await seedMajorGroup();
-  await seedJournalMajorGroupDetail();
-  await seedScopusArea();
-  await seedScopusAreaGroup();
-  await seedScopusMajorGroup();
-  await seedJournalScopusAreaDetail();
-  await seedJournalScopusAreaGroupDetail();
-  await seedJournalScopusMajorGroupDetail();
-  console.log("Seeding complete!");
+  console.time("Total Execution Time");
+  
+  // 1. รันฟังก์ชันเดิมทั้งหมด
+  const steps = [
+    { name: "seedJournalMain", fn: seedJournalMain },
+    { name: "seedAbdc", fn: seedAbdc },
+    { name: "seedAjg", fn: seedAjg },
+    { name: "seedScimago", fn: seedScimago },
+    { name: "seedScopus", fn: seedScopus },
+    { name: "seedNote", fn: seedNote },
+    { name: "seedJournalArea", fn: seedJournalArea },
+    { name: "seedArea", fn: seedArea },
+    { name: "seedJournalAreaDetail", fn: seedJournalAreaDetail },
+    { name: "seedAreaGroup", fn: seedAreaGroup },
+    { name: "seedJournalAreaGroupDetail", fn: seedJournalAreaGroupDetail },
+    { name: "seedMajorGroup", fn: seedMajorGroup },
+    { name: "seedJournalMajorGroupDetail", fn: seedJournalMajorGroupDetail },
+    { name: "seedScopusArea", fn: seedScopusArea },
+    { name: "seedScopusAreaGroup", fn: seedScopusAreaGroup },
+    { name: "seedScopusMajorGroup", fn: seedScopusMajorGroup },
+    { name: "seedJournalScopusAreaDetail", fn: seedJournalScopusAreaDetail },
+    { name: "seedJournalScopusAreaGroupDetail", fn: seedJournalScopusAreaGroupDetail },
+    { name: "seedJournalScopusMajorGroupDetail", fn: seedJournalScopusMajorGroupDetail },
+  ];
+
+  for (const step of steps) {
+    if (typeof step.fn === 'function') {
+      console.time(`Time - ${step.name}`);
+      await step.fn();
+      console.timeEnd(`Time - ${step.name}`);
+    }
+  }
+
+  // 2. เพิ่มการสร้าง Source ตั้งต้น
+  console.time('Time - seedNewSources');
+  await seedNewSources();
+  console.timeEnd('Time - seedNewSources');
+
+  // 3. รันส่วนสคริปต์ใหม่ต่อท้ายพร้อม Progress Bar
+  console.log("\nStarting Excel Process...");
+  await processScopus(FILE_PATHS.SCOPUS);
+  await processScimago(FILE_PATHS.SCIMAGO);
+  await processAjg(FILE_PATHS.AJG);
+  await processAbdc(FILE_PATHS.ABDC);
+
+  console.log("\nSeeding complete!");
+  console.timeEnd("Total Execution Time");
 }
 
 main()

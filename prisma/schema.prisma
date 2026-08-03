@@ -204,3 +204,63 @@ model JOURNAL_SCOPUS_MAJOR_GROUP_DETAIL {
 
   @@id([journal_id, scopus_major_group_id])
 }
+
+model NEW_SOURCE {
+  id                  Int                        @id
+  source_name         String
+  year_version        String?
+  NEW_JOURNAL_RANKING NEW_JOURNAL_RANKING[]
+  NEW_SUBJECT_AREA    NEW_SUBJECT_AREA[]
+}
+
+model NEW_JOURNAL {
+  id                       Int                        @id @default(autoincrement())
+  journal_title            String
+  publisher                String?
+  active_status            String?                    @default("Active")
+  created_at               DateTime                   @default(now())
+  NEW_JOURNAL_AREA_MAPPING NEW_JOURNAL_AREA_MAPPING[]
+  NEW_JOURNAL_ISSN         NEW_JOURNAL_ISSN[]
+  NEW_JOURNAL_RANKING      NEW_JOURNAL_RANKING[]
+}
+
+model NEW_JOURNAL_ISSN {
+  id         Int         @id @default(autoincrement())
+  journal_id Int
+  issn       String
+  issn_type  String?
+  journal    NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+
+  @@unique([journal_id, issn])
+}
+
+model NEW_SUBJECT_AREA {
+  id                       Int                        @id @default(autoincrement())
+  source_id                Int
+  area_code                String?
+  area_name                String
+  area_group               String?
+  major_group              String?
+  NEW_JOURNAL_AREA_MAPPING NEW_JOURNAL_AREA_MAPPING[]
+  source                   NEW_SOURCE                 @relation(fields: [source_id], references: [id], onDelete: Cascade)
+
+  @@unique([source_id, area_name])
+}
+
+model NEW_JOURNAL_AREA_MAPPING {
+  journal_id      Int
+  subject_area_id Int
+  journal         NEW_JOURNAL      @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+  subject_area    NEW_SUBJECT_AREA @relation(fields: [subject_area_id], references: [id], onDelete: Cascade)
+
+  @@id([journal_id, subject_area_id])
+}
+
+model NEW_JOURNAL_RANKING {
+  id         Int         @id @default(autoincrement())
+  journal_id Int
+  source_id  Int
+  rank_value String
+  journal    NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+  source     NEW_SOURCE  @relation(fields: [source_id], references: [id], onDelete: Cascade)
+}
