@@ -8,6 +8,9 @@ export function useJournalSource() {
   const [ranks, setRanks] = useState<string[]>([]);
   const [journals, setJournals] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
+  
+  // 🟢 1. เพิ่ม State เก็บค่า isTop10
+  const [isTop10, setIsTop10] = useState<boolean>(false);
 
   // 🟢 เพิ่ม State สำหรับเก็บ Summary Stats
   const [summary, setSummary] = useState<{
@@ -73,6 +76,9 @@ export function useJournalSource() {
         setJournals(data.journals || []);
         setChartData(data.chartData || []);
 
+        // 🟢 2. ดึงค่า isTop10 จาก Response ของ Backend มาบันทึกลง State
+        setIsTop10(Boolean(data.isTop10));
+
         if (data.pagination) setPagination(data.pagination);
 
         // 🟢 ดึงค่า summary จาก API หรือคำนวณสำรองถ้า API ส่งมาให้บางส่วน
@@ -107,7 +113,8 @@ export function useJournalSource() {
     ranks,
     journals,
     chartData,
-    summary, // 🟢 Return ค่า summary ออกไปใช้งาน
+    isTop10, // 🟢 3. Return ค่า isTop10 ออกไปให้ page.tsx เรียกใช้งาน
+    summary,
     selectedSource,
     selectedAreas,
     selectedRanks,

@@ -24,6 +24,7 @@ export default function JournalSourcePage() {
     page,
     limit,
     pagination,
+    isTop10, // 🟢 ดึง isTop10 ออกมาจาก Hook
     setPage,
     setLimit,
     setSelectedSource,
@@ -31,6 +32,9 @@ export default function JournalSourcePage() {
     setSelectedRanks,
     setSelectedJournal,
   } = useJournalSource();
+
+  // 🟢 แปลง selectedSource เป็น number เพื่อความปลอดภัยในการเปรียบเทียบ ID
+  const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -74,7 +78,13 @@ export default function JournalSourcePage() {
         <EmptyState message="Please select a Source to begin analysis." />
       ) : (
         <>
-          <ChartCard data={chartData} />
+          {/* 🔴 [จุดที่แก้ไข]: ส่ง Props ให้ครบทั้ง data, isTop10, selectedSourceId และ sources */}
+          <ChartCard
+            data={chartData}
+            isTop10={isTop10}
+            selectedSourceId={selectedSourceId}
+            sources={sources}
+          />
 
           {journals.length === 0 ? (
             <EmptyState message="No journals match your filter criteria." />

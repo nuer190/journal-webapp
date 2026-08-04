@@ -74,7 +74,7 @@ export async function GET(req: NextRequest) {
       }),
       prisma.nEW_SOURCE.findMany({ orderBy: { source_name: "asc" } }),
 
-      // 🔴 [จุดที่แก้ไข]: แก้ไขการดึง Subject Area Filter เพื่อให้ครอบคลุม AJG และลบ take: 100 ออก
+      // 🔴 [จุดที่แก้ไขแก้ AJG หาย]: ดึง Area โดยเจาะผ่าน Journal Mapping ของ Source นั้นๆ
       sourceId
         ? prisma.nEW_SUBJECT_AREA.findMany({
             where: {
@@ -91,12 +91,23 @@ export async function GET(req: NextRequest) {
                     },
                   },
                 },
+                {
+                  NEW_JOURNAL_AREA_MAPPING: {
+                    some: {
+                      journal: {
+                        NEW_JOURNAL_AREA_MAPPING: {
+                          some: { subject_area: { source_id: sourceId } },
+                        },
+                      },
+                    },
+                  },
+                },
               ],
             },
             orderBy: { area_name: "asc" },
           })
         : prisma.nEW_SUBJECT_AREA.findMany({
-            orderBy: { area_name: "asc" }, // 🟢 นำ take: 100 ออกแล้ว เพื่อให้ดึงครบทุก Area
+            orderBy: { area_name: "asc" },
           }),
 
       prisma.nEW_JOURNAL_RANKING.findMany({
@@ -122,29 +133,42 @@ export async function GET(req: NextRequest) {
       }),
     ]);
 
-    // 3. Dynamic Chart Data
+    // 🟢 3. Dynamic Chart Data (ปรับให้โชว์ Top 10 ตอนยังไม่เลือก Area หรือ Rank)
+    const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
+    const isTop10 = !hasAreaOrRankFilter; // 👈 เป็น Top 10 ถ้าไม่มีการเลือก Area หรือ Rank (เลือกแค่ Source ก็ยังเป็น Top 10)
+
     const mappingWhereCondition: Prisma.NEW_JOURNAL_AREA_MAPPINGWhereInput = {
       journal: journalWhereCondition,
       ...(selectedAreas.length > 0
         ? { subject_area_id: { in: selectedAreas } }
         : sourceId
-        ? { subject_area: { source_id: sourceId } }
+        ? {
+            OR: [
+              { subject_area: { source_id: sourceId } },
+              { journal: { NEW_JOURNAL_RANKING: { some: { source_id: sourceId } } } },
+            ],
+          }
         : {}),
     };
 
+    // จัดกลุ่มและเรียงลำดับจำนวนมากไปน้อย
     const chartSummaryRaw = await prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
       by: ["subject_area_id"],
       where: mappingWhereCondition,
       _count: { journal_id: true },
+      orderBy: { _count: { journal_id: "desc" } },
     });
 
-    const chartAreaIds = chartSummaryRaw.map((c) => c.subject_area_id);
+    // ถ้ายังไม่ได้เลือก Area/Rank เฉพาะเจาะจง ให้ตัดเอา Top 10
+    const finalChartSummary = isTop10 ? chartSummaryRaw.slice(0, 10) : chartSummaryRaw;
+
+    const chartAreaIds = finalChartSummary.map((c) => c.subject_area_id);
     const chartSubjectAreas = await prisma.nEW_SUBJECT_AREA.findMany({
       where: { id: { in: chartAreaIds } },
       select: { id: true, area_name: true },
     });
 
-    const chartData = chartSummaryRaw.map((item) => {
+    const chartData = finalChartSummary.map((item) => {
       const area = chartSubjectAreas.find((a) => a.id === item.subject_area_id);
       return {
         subject_area_id: item.subject_area_id,
@@ -153,7 +177,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 4. คำนวณค่า Summary
+    // 4. คำนวณค่า Summary รวม
     const validPublishersCount = publishersGroup.filter(
       (p) => p.publisher && p.publisher.trim() !== ""
     ).length;
@@ -198,6 +222,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       summary,
+      isTop10, // 🟢 ส่ง flag true เมื่อเปิดหน้าแรก หรือเมื่อเลือกแค่ Source อย่างเดียว
       sources,
       areas: filteredAreasOptions,
       ranks: filteredRanksOptions.map((r) => r.rank_value).filter(Boolean),
