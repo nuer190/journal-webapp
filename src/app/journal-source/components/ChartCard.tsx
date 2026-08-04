@@ -105,8 +105,8 @@ export function ChartCard({
         </h3>
         <p className="text-xs text-gray-500">
           {isTop10
-            ? "แสดง 10 อันดับแรกที่มีจำนวนวารสารสูงสุด"
-            : "แสดงข้อมูลแยกตาม Subject Area ตามเงื่อนไข Filter"}
+            ? "Display the 10 instances with the highest number of journals. (Top 10 Areas)"
+            : "Display data distributed by Subject Area according to the Filter criteria"}
         </p>
       </div>
 
