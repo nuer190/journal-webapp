@@ -206,61 +206,82 @@ model JOURNAL_SCOPUS_MAJOR_GROUP_DETAIL {
 }
 
 model NEW_SOURCE {
-  id                  Int                        @id
-  source_name         String
-  year_version        String?
-  NEW_JOURNAL_RANKING NEW_JOURNAL_RANKING[]
-  NEW_SUBJECT_AREA    NEW_SUBJECT_AREA[]
+  id                  Int                   @id @default(autoincrement())
+  source_name         String                // ABDC, Scopus, Scimago, AJG
+  year_version        String?               // e.g., "2024", "2025"
+  
+  subject_areas       NEW_SUBJECT_AREA[]
+  journal_rankings    NEW_JOURNAL_RANKING[]
+  area_mappings       NEW_JOURNAL_AREA_MAPPING[]
 }
 
+// 1. ตารางเก็บข้อมูลพื้นฐานของ Journal (ใช้ร่วมกันเพื่อ deduplicate ด้วย ISSN)
 model NEW_JOURNAL {
-  id                       Int                        @id @default(autoincrement())
-  journal_title            String
-  publisher                String?
-  active_status            String?                    @default("Active")
-  created_at               DateTime                   @default(now())
-  NEW_JOURNAL_AREA_MAPPING NEW_JOURNAL_AREA_MAPPING[]
-  NEW_JOURNAL_ISSN         NEW_JOURNAL_ISSN[]
-  NEW_JOURNAL_RANKING      NEW_JOURNAL_RANKING[]
+  id                  Int                        @id @default(autoincrement())
+  journal_title       String
+  publisher           String?
+  active_status       String?                    @default("Active") // Active / Inactive (ใช้หลักๆ ใน Scopus)
+  source_type         String?                    // Journal, Conference, Book Series (Scopus/Scimago)
+  coverage            String?                    // ปีที่ออกวารสาร e.g., "1990-2024" (Scopus/Scimago)
+  year_inception      String?                    // ปีที่ก่อตั้ง (ABDC)
+  created_at          DateTime                   @default(now())
+
+  issns               NEW_JOURNAL_ISSN[]
+  area_mappings       NEW_JOURNAL_AREA_MAPPING[]
+  rankings            NEW_JOURNAL_RANKING[]
 }
 
+// 2. ตารางเก็บ ISSN (แยก Print / Online)
 model NEW_JOURNAL_ISSN {
-  id         Int         @id @default(autoincrement())
-  journal_id Int
-  issn       String
-  issn_type  String?
-  journal    NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+  id                  Int         @id @default(autoincrement())
+  journal_id          Int
+  issn                String
+  issn_type           String?     // "PRINT", "ONLINE/EISSN"
+  journal             NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
 
   @@unique([journal_id, issn])
 }
 
+// 3. ตาราง Subject Area (ระบุชัดเจนว่าสังกัด Source ไหน)
 model NEW_SUBJECT_AREA {
-  id                       Int                        @id @default(autoincrement())
-  source_id                Int
-  area_code                String?
-  area_name                String
-  area_group               String?
-  major_group              String?
-  NEW_JOURNAL_AREA_MAPPING NEW_JOURNAL_AREA_MAPPING[]
-  source                   NEW_SOURCE                 @relation(fields: [source_id], references: [id], onDelete: Cascade)
+  id                  Int                        @id @default(autoincrement())
+  source_id           Int
+  area_code           String?                    // FoR code (ABDC) หรือ ASJC code (Scopus) เช่น "1000", "3600"
+  area_name           String                     // ชื่อ Area / Field
+  area_group          String?                    // หมวดหมู่ย่อย
+  major_group         String?                    // หมวดหมู่ใหญ่
+  
+  source              NEW_SOURCE                 @relation(fields: [source_id], references: [id], onDelete: Cascade)
+  journal_mappings    NEW_JOURNAL_AREA_MAPPING[]
 
   @@unique([source_id, area_name])
 }
 
+// 4. [จุดสำคัญที่สุด 🟢] ตาราง Mapping ระหว่าง Journal กับ Subject Area 
+// ย้าย area_rank มาไว้นี่ เพื่อรองรับ Scimago ที่มี Rank แยกตาม Area!
 model NEW_JOURNAL_AREA_MAPPING {
-  journal_id      Int
-  subject_area_id Int
-  journal         NEW_JOURNAL      @relation(fields: [journal_id], references: [id], onDelete: Cascade)
-  subject_area    NEW_SUBJECT_AREA @relation(fields: [subject_area_id], references: [id], onDelete: Cascade)
+  id                  Int              @id @default(autoincrement())
+  journal_id          Int
+  subject_area_id     Int
+  source_id           Int              // ระบุ Source ซ้ำเพื่อความรวดเร็วในการ Query Filter
+  area_rank           String?          // 🟢 เก็บ Rank เฉพาะ Area นี้ (เช่น Q1, Q2 ของ Scimago)
 
-  @@id([journal_id, subject_area_id])
+  journal             NEW_JOURNAL      @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+  subject_area        NEW_SUBJECT_AREA @relation(fields: [subject_area_id], references: [id], onDelete: Cascade)
+  source              NEW_SOURCE       @relation(fields: [source_id], references: [id], onDelete: Cascade)
+
+  @@unique([journal_id, subject_area_id, source_id])
 }
 
+// 5. ตาราง Ranking หลักของ Journal ประจำ Source
 model NEW_JOURNAL_RANKING {
-  id         Int         @id @default(autoincrement())
-  journal_id Int
-  source_id  Int
-  rank_value String
-  journal    NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
-  source     NEW_SOURCE  @relation(fields: [source_id], references: [id], onDelete: Cascade)
+  id                  Int         @id @default(autoincrement())
+  journal_id          Int
+  source_id           Int
+  overall_rank        String      // ABDC: "A*", Scimago: "Best Quartile (Q1)", AJG: "4*", Scopus: "Top 10%"
+  
+  journal             NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
+  source              NEW_SOURCE  @relation(fields: [source_id], references: [id], onDelete: Cascade)
+
+  @@unique([journal_id, source_id])
 }

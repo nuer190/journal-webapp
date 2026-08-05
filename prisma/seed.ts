@@ -943,26 +943,6 @@ const AREA_GROUP_MAP: Record<string, string[]> = {
   ]
 };
 
-// Create Case-Insensitive Reverse Lookup Table
-const REVERSE_AREA_GROUP_MAP: Record<string, string> = {};
-Object.entries(AREA_GROUP_MAP).forEach(([group, items]) => {
-  items.forEach((item) => {
-    // Clean ข้อมูล item:
-    // 1. ตัดเลข 4 หลักข้างหน้าออก (ถ้ามี)
-    // 2. แปลง \n หรือ \r ให้เป็น Space
-    // 3. Trim ช่องว่างส่วนเกิน และแปลงเป็น lowercase
-    const cleanItem = item
-      .replace(/^\d{4}\s*/, '')
-      .replace(/[\r\n]+/g, ' ')
-      .trim()
-      .toLowerCase();
-
-    if (cleanItem) {
-      REVERSE_AREA_GROUP_MAP[cleanItem] = group;
-    }
-  });
-});
-
 const MAJOR_GROUP_MAP: Record<string, string> = {
   "Business, Management and Accounting": "Business, Economics & Management",
   "Economics, Econometrics and Finance": "Business, Economics & Management",
@@ -993,14 +973,38 @@ const MAJOR_GROUP_MAP: Record<string, string> = {
   "General": "Applied Sciences, Sustainability & Interdisciplinary"
 };
 
+// Create Case-Insensitive Reverse Lookup Table
+const REVERSE_AREA_GROUP_MAP: Record<string, string> = {};
+Object.entries(AREA_GROUP_MAP).forEach(([group, items]) => {
+  items.forEach((item) => {
+    const cleanItem = item
+      .replace(/^\d{4}\s*/, '')
+      .replace(/[\r\n]+/g, ' ')
+      .trim()
+      .toLowerCase();
+    if (cleanItem) {
+      REVERSE_AREA_GROUP_MAP[cleanItem] = group;
+    }
+  });
+});
+
 // ==========================================
-// UTILITY & HELPER FUNCTIONS (REFACTORED)
+// UTILITY & HELPER FUNCTIONS
 // ==========================================
+function cleanTitle(titleVal: any): string {
+  if (!titleVal) return '';
+  return String(titleVal)
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function cleanIssn(issnVal: any): string[] {
   if (!issnVal) return [];
   const str = String(issnVal).replace(/-/g, '');
   const matches = str.match(/[0-9X]{8}/gi);
-  return matches ? matches.map((i) => i.toUpperCase()) : [];
+  return matches ? Array.from(new Set(matches.map((i) => i.toUpperCase()))) : [];
 }
 
 function readExcelFile(filePath: string) {
@@ -1021,7 +1025,6 @@ function deriveGroups(areaName: string) {
   return { areaGroup, majorGroup };
 }
 
-// Helper ค้นหา Key ใน Excel Row แบบยืดหยุ่น (ไม่สนใจตัวพิมพ์เล็ก/ใหญ่ และ space)
 function getRowValue(row: Record<string, any>, possibleKeys: string[]): any {
   const rowKeys = Object.keys(row);
   for (const pKey of possibleKeys) {
@@ -1034,11 +1037,29 @@ function getRowValue(row: Record<string, any>, possibleKeys: string[]): any {
   return null;
 }
 
-// 🟢 ปรับปรุง: ค้นหา Journal ยืดหยุ่นขึ้น (เช็กทั้ง ISSN และ Title)
-async function findOrCreateJournal(title: string, publisher?: string, issns: string[] = []) {
+function createProgressBar(title: string) {
+  return new cliProgress.SingleBar({
+    format: `${title.padEnd(8)} |{bar}| {percentage}% | {value}/{total} Rows | ETA: {eta}s`,
+    barCompleteChar: '\u2588',
+    barIncompleteChar: '\u2591',
+    hideCursor: true,
+    clearOnComplete: false
+  });
+}
+
+// 🟢 Find or Create Journal (อัปเดต Metadata เช่น coverage, active_status)
+async function findOrCreateJournal(
+  title: string, 
+  publisher?: string, 
+  issns: string[] = [], 
+  metaData?: { active_status?: string; source_type?: string; coverage?: string; year_inception?: string }
+): Promise<number> {
+  const cleanedTitle = cleanTitle(title);
+  if (!cleanedTitle) throw new Error('Journal title cannot be empty');
+
   let journalId: number | null = null;
 
-  // 1. ค้นจาก ISSN ก่อน
+  // 1. ค้นจาก ISSN
   if (issns.length > 0) {
     const existingIssn = await prisma.nEW_JOURNAL_ISSN.findFirst({
       where: { issn: { in: issns } },
@@ -1047,34 +1068,46 @@ async function findOrCreateJournal(title: string, publisher?: string, issns: str
     if (existingIssn) journalId = existingIssn.journal_id;
   }
 
-  // 2. ถ้าไม่เจอ ค้นจาก Title (Case-insensitive)
-  if (!journalId && title) {
+  // 2. ค้นจาก Title
+  if (!journalId) {
     const existingTitle = await prisma.nEW_JOURNAL.findFirst({
-      where: { journal_title: { equals: title, mode: 'insensitive' } },
+      where: { journal_title: { equals: cleanedTitle, mode: 'insensitive' } },
       select: { id: true }
     });
     if (existingTitle) journalId = existingTitle.id;
   }
 
-  // 3. ถ้าไม่เจอเลย ให้สร้างใหม่
+  // 3. สร้างใหม่ หรือ อัปเดตข้อมูลเพิ่มเติม
   if (!journalId) {
     const newJournal = await prisma.nEW_JOURNAL.create({
       data: {
-        journal_title: title,
-        publisher: publisher || null
+        journal_title: cleanedTitle,
+        publisher: publisher || null,
+        active_status: metaData?.active_status || 'Active',
+        source_type: metaData?.source_type || null,
+        coverage: metaData?.coverage || null,
+        year_inception: metaData?.year_inception || null
       }
     });
     journalId = newJournal.id;
-  } else if (publisher) {
-    // อัปเดต Publisher เพิ่มเติมถ้ายังไม่มี
+  } else {
+    // มี Journal อยู่แล้ว ให้อัปเดตข้อมูล Metadata ที่ยังไม่มี
     await prisma.nEW_JOURNAL.update({
       where: { id: journalId },
-      data: { publisher }
+      data: {
+        ...(publisher && { publisher }),
+        ...(metaData?.active_status && { active_status: metaData.active_status }),
+        ...(metaData?.source_type && { source_type: metaData.source_type }),
+        ...(metaData?.coverage && { coverage: metaData.coverage }),
+        ...(metaData?.year_inception && { year_inception: metaData.year_inception })
+      }
     }).catch(() => {});
   }
+
   return journalId;
 }
 
+// 🟢 Save ISSN
 async function saveIssns(journalId: number, issns: string[]) {
   for (const issn of issns) {
     if (!issn) continue;
@@ -1086,17 +1119,20 @@ async function saveIssns(journalId: number, issns: string[]) {
   }
 }
 
+// 🟢 Save Area & Journal Area Mapping
 async function saveJournalAreaMapping(
   journalId: number,
   sourceId: number,
   areaName: string,
-  areaCode?: string
+  areaCode?: string,
+  areaRank?: string
 ) {
   const trimmedAreaName = areaName.trim();
   if (!trimmedAreaName) return;
 
   const { areaGroup, majorGroup } = deriveGroups(trimmedAreaName);
 
+  // 1. สร้าง/อัปเดต Subject Area
   const area = await prisma.nEW_SUBJECT_AREA.upsert({
     where: {
       source_id_area_name: {
@@ -1118,23 +1154,52 @@ async function saveJournalAreaMapping(
     }
   });
 
+  // 2. แมป Journal กับ Subject Area (แก้ไขตรงนี้ให้มี source_id)
   await prisma.nEW_JOURNAL_AREA_MAPPING.upsert({
     where: {
-      journal_id_subject_area_id: {
+      // 🟢 เปลี่ยนจาก journal_id_subject_area_id เป็นตัวนี้:
+      journal_id_subject_area_id_source_id: {
         journal_id: journalId,
-        subject_area_id: area.id
+        subject_area_id: area.id,
+        source_id: sourceId
       }
     },
-    update: {},
+    update: {
+      ...(areaRank && { area_rank: areaRank })
+    },
     create: {
       journal_id: journalId,
-      subject_area_id: area.id
+      subject_area_id: area.id,
+      source_id: sourceId,
+      area_rank: areaRank || null
+    }
+  });
+}
+
+// 🟢 Save Journal Overall Rank ประจำ Source
+async function saveJournalRanking(journalId: number, sourceId: number, overallRank: string) {
+  if (!overallRank) return;
+  const cleanRank = String(overallRank).trim();
+  if (!cleanRank) return;
+
+  await prisma.nEW_JOURNAL_RANKING.upsert({
+    where: {
+      journal_id_source_id: {
+        journal_id: journalId,
+        source_id: sourceId
+      }
+    },
+    update: { overall_rank: cleanRank },
+    create: {
+      journal_id: journalId,
+      source_id: sourceId,
+      overall_rank: cleanRank
     }
   });
 }
 
 // ==========================================
-// SEED NEW SOURCES (เพิ่มฟังก์ชันที่ขาดหายไป)
+// SEED NEW SOURCES
 // ==========================================
 async function seedNewSources() {
   console.log('--- Seeding NEW_SOURCE ---');
@@ -1154,41 +1219,11 @@ async function seedNewSources() {
   }
 }
 
-// Helper สร้าง Progress Bar
-function createProgressBar(title: string) {
-  return new cliProgress.SingleBar({
-    format: `${title.padEnd(8)} |{bar}| {percentage}% | {value}/{total} Rows | ETA: {eta}s`,
-    barCompleteChar: '\u2588',
-    barIncompleteChar: '\u2591',
-    hideCursor: true,
-    clearOnComplete: false
-  });
-
-}
-
-// Helper บันทึก Ranking แบบปลอดภัย (ไม่พึ่ง Unique Constraint)
-async function saveJournalRanking(journalId: number, sourceId: number, rankVal: string) {
-  if (!rankVal) return;
-  const cleanRank = String(rankVal).trim();
-  if (!cleanRank) return;
-  
-  await prisma.nEW_JOURNAL_RANKING.deleteMany({
-    where: { journal_id: journalId, source_id: sourceId }
-  });
-
-  await prisma.nEW_JOURNAL_RANKING.create({
-    data: {
-      journal_id: journalId,
-      source_id: sourceId,
-      rank_value: cleanRank
-    }
-  });
-}
-
 // ==========================================
 // PROCESS EXCEL FILES FOR EACH SOURCE
 // ==========================================
-// 1. SCOPUS
+
+// 1. SCOPUS (source_id = 1)
 async function processScopus(filePath: string) {
   console.log('\n--- Processing Scopus ---');
   console.time('Time - Scopus');
@@ -1203,15 +1238,18 @@ async function processScopus(filePath: string) {
     if (title) {
       const publisher = getRowValue(row, ['Publisher']);
       const activeStatus = String(getRowValue(row, ['Active or Inactive']) || 'Active');
+      const sourceType = getRowValue(row, ['Source Type']);
+      const coverage = String(getRowValue(row, ['Coverage']) || '');
       const issns = [...cleanIssn(getRowValue(row, ['ISSN'])), ...cleanIssn(getRowValue(row, ['EISSN', 'ISSN Online']))];
-      const journalId = await findOrCreateJournal(title, publisher, issns);
+
+      const journalId = await findOrCreateJournal(title, publisher, issns, {
+        active_status: activeStatus,
+        source_type: sourceType,
+        coverage: coverage
+      });
       await saveIssns(journalId, issns);
 
-      await prisma.nEW_JOURNAL.update({
-        where: { id: journalId },
-        data: { active_status: activeStatus }
-      });
-
+      // วนลูปอ่าน Area คอลัมน์ 1000 - 3600
       for (const rawColKey of Object.keys(row)) {
         const cleanedColKey = rawColKey.replace(/[\r\n]+/g, ' ').trim();
         const match = cleanedColKey.match(/^(\d{4})\s+(.+)$/);
@@ -1232,7 +1270,7 @@ async function processScopus(filePath: string) {
   console.timeEnd('Time - Scopus');
 }
 
-// 2. SCIMAGO
+// 2. SCIMAGO (source_id = 2)
 async function processScimago(filePath: string) {
   console.log('\n--- Processing Scimago ---');
   console.time('Time - Scimago');
@@ -1246,10 +1284,23 @@ async function processScimago(filePath: string) {
 
     if (title) {
       const publisher = getRowValue(row, ['Publisher']);
+      const sourceType = getRowValue(row, ['Type']);
+      const coverage = String(getRowValue(row, ['Coverage']) || '');
+      const bestQuartile = getRowValue(row, ['SJR Best Quartile']);
       const issns = cleanIssn(getRowValue(row, ['Issn', 'ISSN']));
-      const journalId = await findOrCreateJournal(title, publisher, issns);
+
+      const journalId = await findOrCreateJournal(title, publisher, issns, {
+        source_type: sourceType,
+        coverage: coverage
+      });
       await saveIssns(journalId, issns);
 
+      // บันทึก Overall Rank (SJR Best Quartile)
+      if (bestQuartile) {
+        await saveJournalRanking(journalId, 2, String(bestQuartile));
+      }
+
+      // แยก Scimago Categories ออกเป็น Area + Area Rank (Q1, Q2)
       const catStr = String(getRowValue(row, ['Scimago_Categories', 'Categories']) || '');
       if (catStr) {
         const categories = catStr.split(';');
@@ -1257,9 +1308,8 @@ async function processScimago(filePath: string) {
           const match = cat.trim().match(/^(.*?)\s*\((Q[1-4])\)$/i);
           if (match) {
             const areaName = match[1].trim();
-            const rankVal = match[2].toUpperCase().trim();
-            await saveJournalAreaMapping(journalId, 2, areaName);
-            await saveJournalRanking(journalId, 2, rankVal);
+            const areaRank = match[2].toUpperCase().trim();
+            await saveJournalAreaMapping(journalId, 2, areaName, undefined, areaRank);
           } else {
             const areaName = cat.trim();
             if (areaName) {
@@ -1275,92 +1325,83 @@ async function processScimago(filePath: string) {
   console.timeEnd('Time - Scimago');
 }
 
-// 3. AJG
 async function processAjg(filePath: string) {
   console.log('\n--- Processing AJG ---');
   console.time('Time - AJG');
-  const rows = readExcelFile(filePath);
 
-  // 🔍 DEBUG: พิมพ์ดูว่า Column Headers จริงๆ ชื่ออะไร และแถวแรกอ่านได้อะไร
-  if (rows.length > 0) {
-    console.log('[AJG Debug] Headers ทั้งหมดใน Excel:', Object.keys(rows[0]));
-    console.log('[AJG Debug] ข้อมูลแถวแรก:', rows[0]);
-  } else {
+  const rows = readExcelFile(filePath);
+  if (rows.length === 0) {
     console.log('❌ [AJG Debug] อ่านไฟล์ได้ 0 แถว!');
     return;
+  }
+
+  //  Debug ลองดูหัวข้อ Column จริงใน Excel แถวแรก
+  if (rows.length > 0) {
+    console.log(' [AJG Debug] Sample Headers:', Object.keys(rows[0]));
   }
 
   const progressBar = createProgressBar('AJG');
   progressBar.start(rows.length, 0);
 
-  let insertedCount = 0; // นับจำนวนที่เข้า DB จริง
+  let successAreaCount = 0;
+  let missingAreaCount = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
-
-    // 🟢 ปรับเพิ่ม possibleKeys ให้ครอบคลุมทุกแบบที่พบบ่อยในไฟล์ AJG
-    const title = String(
-      getRowValue(row, [
-        'Journal Title',
-        'Journal title',
-        'Journal',
-        'Title',
-        'Name of Journal',
-        'AJG Journal'
-      ]) || ''
-    ).trim();
+    const rawTitle = getRowValue(row, [
+      'Journal Title', 'Journal title', 'Journal', 'Title', 'Name of Journal', 'AJG Journal'
+    ]);
+    const title = cleanTitle(rawTitle);
 
     if (title) {
-      insertedCount++; // นับว่าเจอ Title
-      const issns = cleanIssn(getRowValue(row, ['ISSN', 'Issn', 'EISSN', 'eISSN', 'Issn-online']));
+      const issns = cleanIssn(getRowValue(row, ['ISSN', 'Issn', 'EISSN', 'eISSN', 'Issn-online', 'ISSN Online']));
       
-      const areaName = String(
-        getRowValue(row, [
-          'Subject area AJG2024 lowest',
-          'Subject area AJG2024 lowest]',
-          'Subject Area',
-          'AJG Subject Area',
-          'Field',
-          'Primary Field',
-          'AJG Field'
-        ]) || ''
-      ).trim();
+      //  เพิ่มการดึงชื่อ Column ที่ครอบคลุมขึ้นสำหรับ AJG Area
+      const areaName = cleanTitle(getRowValue(row, [
+        'Subject area AJG2024lowest]',
+        'Subject area AJG2024 lowest',
+        'Subject area AJG2024 lowest]',
+        'Subject area AJG 2024',
+        'Subject area AJG2021',
+        'Subject area',
+        'Subject Area',
+        'AJG Subject Area',
+        'AJG Field',
+        'Field',
+        'Sector'
+      ]));
 
-      const rankVal = String(
-        getRowValue(row, [
-          'AJG 2024 4*-1',
-          'AJG 2024',
-          'AJG 2021',
-          'AJG Rating',
-          'Rank',
-          'Rating',
-          '2024 Rating'
-        ]) || ''
-      ).trim();
+      const rankVal = cleanTitle(getRowValue(row, [
+        'AJG 2024 4*-1', 'AJG 2024', 'AJG 2021', 'AJG Rating', 'Rank', 'Rating', 'AJG Grade'
+      ]));
 
-      const journalId = await findOrCreateJournal(title, undefined, issns);
-      await saveIssns(journalId, issns);
+      try {
+        const journalId = await findOrCreateJournal(title, undefined, issns);
+        if (issns.length > 0) await saveIssns(journalId, issns);
 
-      if (areaName) {
-        await saveJournalAreaMapping(journalId, 3, areaName);
-      }
-      if (rankVal) {
-        await saveJournalRanking(journalId, 3, rankVal);
+        if (areaName) {
+          // Pass Source ID = 3 สำหรับ AJG
+          await saveJournalAreaMapping(journalId, 3, areaName);
+          successAreaCount++;
+        } else {
+          missingAreaCount++;
+        }
+
+        if (rankVal) await saveJournalRanking(journalId, 3, rankVal);
+      } catch (err) {
+        // Log error ออกมาดูแทนการข้ามเฉยๆ
+        console.error(`❌ Error on row ${i + 1} (${title}):`, err);
       }
     }
     progressBar.update(i + 1);
   }
+
   progressBar.stop();
-  console.log(`✅ [AJG Debug] มีข้อมูล Journal ที่บันทึกสำเร็จทั้งหมด: ${insertedCount} / ${rows.length} รายการ`);
-  // วางต่อท้ายใน processAjg ก่อน console.timeEnd
-  const ajgRankCount = await prisma.nEW_JOURNAL_RANKING.count({
-    where: { source_id: 3 } // 3 คือ ID ของ AJG
-  });
-  console.log(`📊 [Verification] จำนวน Ranking ของ AJG (source_id: 3) ใน DB ปัจจุบัน = ${ajgRankCount} แถว`);
+  console.log(`\n [AJG Summary] Mapped Area: ${successAreaCount} journals | Missing Area: ${missingAreaCount} journals`);
   console.timeEnd('Time - AJG');
 }
 
-// 4. ABDC
+// 4. ABDC (source_id = 4)
 async function processAbdc(filePath: string) {
   console.log('\n--- Processing ABDC ---');
   console.time('Time - ABDC');
@@ -1374,14 +1415,15 @@ async function processAbdc(filePath: string) {
 
     if (title) {
       const publisher = getRowValue(row, ['Publisher']);
+      const yearInception = String(getRowValue(row, ['Year Inception', 'Inception']) || '');
       const issns = [...cleanIssn(getRowValue(row, ['ISSN'])), ...cleanIssn(getRowValue(row, ['ISSN Online', 'EISSN']))];
-
       const rawFor = getRowValue(row, ['FoR', 'FOR', 'Field of Research', 'FOR Code']);
       const forCode = parseInt(String(rawFor || '').replace(/\D/g, ''), 10);
-
       const rankVal = String(getRowValue(row, ['2025 Rating', '2022 Rating', 'Rating', 'Rank']) || '').trim();
 
-      const journalId = await findOrCreateJournal(title, publisher, issns);
+      const journalId = await findOrCreateJournal(title, publisher, issns, {
+        year_inception: yearInception
+      });
       await saveIssns(journalId, issns);
 
       if (!isNaN(forCode) && FOR_MAPPING[forCode]) {

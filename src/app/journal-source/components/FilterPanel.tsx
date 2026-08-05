@@ -1,26 +1,17 @@
 "use client";
 
-import React from "react";
-
-interface Source {
-  id: number;
-  source_name: string;
-}
-
-interface Area {
-  id: number;
-  area_name: string;
-}
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { Source, SubjectArea } from "../hooks/useJournalSource";
 
 interface FilterPanelProps {
   sources: Source[];
-  areas: Area[];
+  areas: SubjectArea[];
   ranks: string[];
   selectedSource: string;
-  selectedAreas: string[];
+  selectedAreas: (string | number)[];
   selectedRanks: string[];
   onSourceChange: (sourceId: string) => void;
-  onAreaChange: (areas: string[]) => void;
+  onAreaChange: (areas: (string | number)[]) => void;
   onRankChange: (ranks: string[]) => void;
 }
 
@@ -35,16 +26,37 @@ export function FilterPanel({
   onAreaChange,
   onRankChange,
 }: FilterPanelProps) {
-  // Toggle Area selection
-  const handleAreaToggle = (areaIdStr: string) => {
-    if (selectedAreas.includes(areaIdStr)) {
-      onAreaChange(selectedAreas.filter((id) => id !== areaIdStr));
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // ปิด Popover เมื่อคลิกด้านนอก
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredAreas = useMemo(() => {
+    return areas.filter((a) =>
+      a.area_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [areas, searchTerm]);
+
+  const handleAreaToggle = (areaId: string | number) => {
+    const areaIdStr = String(areaId);
+    const isSelected = selectedAreas.some((id) => String(id) === areaIdStr);
+    if (isSelected) {
+      onAreaChange(selectedAreas.filter((id) => String(id) !== areaIdStr));
     } else {
-      onAreaChange([...selectedAreas, areaIdStr]);
+      onAreaChange([...selectedAreas, areaId]);
     }
   };
 
-  // Toggle Rank selection
   const handleRankToggle = (rankStr: string) => {
     if (selectedRanks.includes(rankStr)) {
       onRankChange(selectedRanks.filter((r) => r !== rankStr));
@@ -54,35 +66,41 @@ export function FilterPanel({
   };
 
   return (
-    <div className="bg-white p-5 rounded-xl shadow border border-gray-100 space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* 1. Source Dropdown */}
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+        
+        {/* 1. SELECT SOURCE */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             Select Source
           </label>
           <select
             value={selectedSource}
-            onChange={(e) => onSourceChange(e.target.value)}
-            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => {
+              onSourceChange(e.target.value);
+              onAreaChange([]);
+              onRankChange([]);
+              setSearchTerm("");
+            }}
+            className="w-full h-10 px-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer shadow-sm"
           >
             <option value="">-- Choose Source --</option>
             {sources.map((s) => (
-              <option key={s.id} value={s.id.toString()}>
+              <option key={s.id} value={String(s.id)}>
                 {s.source_name}
               </option>
             ))}
           </select>
         </div>
 
-        {/* 2. Rank Selection */}
+        {/* 2. RANKS */}
         <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             Ranks
           </label>
-          <div className="flex flex-wrap gap-1.5 min-h-[38px] items-center p-1 border border-gray-200 rounded-lg bg-gray-50/50">
+          <div className="flex flex-wrap gap-1 min-h-[40px] items-center p-1 border border-gray-200 rounded-xl bg-gray-50/50">
             {ranks.length === 0 ? (
-              <span className="text-xs text-gray-400 px-2">Select source first</span>
+              <span className="text-xs text-gray-400 px-3">Select source first</span>
             ) : (
               ranks.map((r) => {
                 const isSelected = selectedRanks.includes(r);
@@ -91,10 +109,10 @@ export function FilterPanel({
                     key={r}
                     type="button"
                     onClick={() => handleRankToggle(r)}
-                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
                       isSelected
                         ? "bg-blue-600 text-white shadow-sm"
-                        : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                        : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/80"
                     }`}
                   >
                     {r}
@@ -105,52 +123,94 @@ export function FilterPanel({
           </div>
         </div>
 
-        {/* 3. Subject Areas Multi-select with Selected Tags */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
-            Subject Areas ({selectedAreas.length} selected)
-          </label>
-          
-          {/* Custom Select Dropdown */}
-          <select
-            disabled={!selectedSource}
-            onChange={(e) => {
-              if (e.target.value) {
-                handleAreaToggle(e.target.value);
-                e.target.value = ""; // Reset dropdown after click
-              }
-            }}
-            className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
-          >
-            <option value="">+ Add Subject Area filter...</option>
-            {areas.map((a) => {
-              const isSelected = selectedAreas.includes(a.id.toString());
-              return (
-                <option key={a.id} value={a.id.toString()}>
-                  {isSelected ? `✓ ${a.area_name}` : a.area_name}
-                </option>
-              );
-            })}
-          </select>
+        {/* 3. SUBJECT AREAS (Popover Dropdown) */}
+        <div className="space-y-1.5 relative" ref={dropdownRef}>
+          <div className="flex justify-between items-center">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Subject Areas
+            </label>
+            {selectedAreas.length > 0 && (
+              <span className="text-xs font-bold text-blue-600">
+                ({selectedAreas.length} selected)
+              </span>
+            )}
+          </div>
+
+          <div className="relative">
+            <input
+              type="text"
+              placeholder={selectedSource ? "🔍 Search subject area..." : "Select source first"}
+              disabled={!selectedSource}
+              value={searchTerm}
+              onFocus={() => setIsOpen(true)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setIsOpen(true);
+              }}
+              className="w-full h-10 pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed shadow-sm transition-all"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 top-2.5 text-xs text-gray-400 hover:text-gray-600 font-bold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Floating Menu Popover */}
+          {isOpen && selectedSource && (
+            <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-50 p-1.5 max-h-56 overflow-y-auto space-y-1">
+              {filteredAreas.length === 0 ? (
+                <div className="p-3 text-center text-xs text-gray-400">
+                  No matching subject areas found
+                </div>
+              ) : (
+                filteredAreas.map((a) => {
+                  const isSelected = selectedAreas.some(
+                    (id) => String(id) === String(a.id)
+                  );
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      onClick={() => handleAreaToggle(a.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-all flex justify-between items-center ${
+                        isSelected
+                          ? "bg-blue-600 text-white font-semibold shadow-sm"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="truncate">{a.area_name}</span>
+                      {isSelected && <span className="ml-1 text-xs font-bold">✓</span>}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 🟢 ส่วนแสดงผล Chips/Tags ที่กดเลือกไว้แล้วสำหรับ Subject Area */}
+      {/* ACTIVE CHIPS */}
       {selectedAreas.length > 0 && (
-        <div className="pt-2 border-t border-gray-100 flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-gray-400 font-medium mr-1">Active Areas:</span>
-          {selectedAreas.map((areaIdStr) => {
-            const areaObj = areas.find((a) => a.id.toString() === areaIdStr);
+        <div className="pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-400 font-semibold">Active Areas:</span>
+          {selectedAreas.map((areaId) => {
+            const areaIdStr = String(areaId);
+            const areaObj = areas.find((a) => String(a.id) === areaIdStr);
             return (
               <span
                 key={areaIdStr}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md border border-blue-200"
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 text-xs font-semibold rounded-lg border border-blue-100 shadow-sm"
               >
                 {areaObj ? areaObj.area_name : `Area #${areaIdStr}`}
                 <button
                   type="button"
                   onClick={() => handleAreaToggle(areaIdStr)}
-                  className="text-blue-500 hover:text-blue-900 focus:outline-none font-bold ml-0.5"
+                  className="text-blue-400 hover:text-blue-700 font-bold ml-1 transition-colors"
                 >
                   ✕
                 </button>
@@ -160,7 +220,7 @@ export function FilterPanel({
           <button
             type="button"
             onClick={() => onAreaChange([])}
-            className="text-xs text-red-500 hover:underline ml-2"
+            className="text-xs text-red-500 font-medium hover:underline ml-1"
           >
             Clear all
           </button>

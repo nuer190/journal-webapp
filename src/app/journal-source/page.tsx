@@ -1,196 +1,129 @@
 "use client";
 
-import React from "react";
-import { useJournalSource } from "./hooks/useJournalSource";
+import React, { useState } from "react";
+import { useJournalSource, Journal } from "./hooks/useJournalSource";
 import { FilterPanel } from "./components/FilterPanel";
 import { SummaryCards } from "./components/SummaryCards";
 import { ChartCard } from "./components/ChartCard";
 import { JournalTable } from "./components/JournalTable";
-import { EmptyState } from "./components/EmptyState";
+import { JournalDetailModal } from "./components/journalDetailModel";
 
 export default function JournalSourcePage() {
   const {
-    sources = [],
-    areas = [],
-    ranks = [],
-    journals = [],
-    chartData = [],
-    summary = { totalJournals: 0, totalPublishers: 0, totalAreas: 0 },
+    sources,
+    areas,
+    ranks,
+    journals,
+    chartData,
+    summary,
+    isTop10,
     selectedSource,
-    selectedAreas = [],
-    selectedRanks = [],
-    loading,
-    selectedJournal,
+    selectedSourceId,
+    selectedAreas,
+    selectedRanks,
     page,
-    limit,
     pagination,
-    isTop10, // 🟢 ดึง isTop10 ออกมาจาก Hook
-    setPage,
-    setLimit,
+    loading,
+    error,
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
-    setSelectedJournal,
+    setPage,
   } = useJournalSource();
 
-  // 🟢 แปลง selectedSource เป็น number เพื่อความปลอดภัยในการเปรียบเทียบ ID
-  const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
+  const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="min-h-screen bg-gray-50/50 p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Journal Source Explorer
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+          Journal Source Analytics
         </h1>
-        <p className="text-sm text-gray-500">
-          Filter and analyze academic journals by source and subject areas
+        <p className="text-xs text-gray-500 mt-1">
+          Explore and filter journal rankings and distributions across various index sources.
         </p>
       </div>
 
-      {/* 1. Filter Panel */}
+      {/* Error Alert */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-100 text-red-600 rounded-2xl text-xs font-semibold">
+          Error: {error}
+        </div>
+      )}
+
+      {/* Filter Panel */}
       <FilterPanel
         sources={sources}
         areas={areas}
         ranks={ranks}
         selectedSource={selectedSource}
-        selectedAreas={selectedAreas.map(String)}
+        selectedAreas={selectedAreas}
         selectedRanks={selectedRanks}
         onSourceChange={setSelectedSource}
-        onAreaChange={(values: any) => setSelectedAreas(values)}
-        onRankChange={(values: any) => setSelectedRanks(values)}
+        onAreaChange={setSelectedAreas}
+        onRankChange={setSelectedRanks}
       />
 
-      {/* 2. Summary Cards Component */}
-      <SummaryCards
-        totalJournals={summary.totalJournals}
-        totalPublishers={summary.totalPublishers}
-        totalAreas={summary.totalAreas}
-        loading={loading}
+      {/* Summary Stat Cards */}
+      <SummaryCards summary={summary} loading={loading} />
+
+      {/* Chart Section */}
+      <ChartCard
+        data={chartData}
+        isTop10={isTop10}
+        selectedSourceId={selectedSource ? Number(selectedSource) : undefined}
+        sources={sources}
       />
 
-      {/* 3. Main Content: Loading / Empty State / Chart & Table */}
-      {loading ? (
-        <div className="p-12 text-center text-gray-400 flex flex-col items-center justify-center space-y-3">
-          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-          <span>Loading journal data...</span>
+      {/* Main Journal Table */}
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <h3 className="text-base font-bold text-gray-900">Journal List</h3>
+          <span className="text-xs text-gray-400">
+            Showing Page {pagination.page} of {pagination.totalPages}
+          </span>
         </div>
-      ) : !selectedSource && journals.length === 0 ? (
-        <EmptyState message="Please select a Source to begin analysis." />
-      ) : (
-        <>
-          {/* 🔴 [จุดที่แก้ไข]: ส่ง Props ให้ครบทั้ง data, isTop10, selectedSourceId และ sources */}
-          <ChartCard
-            data={chartData}
-            isTop10={isTop10}
-            selectedSourceId={selectedSourceId}
-            sources={sources}
-          />
 
-          {journals.length === 0 ? (
-            <EmptyState message="No journals match your filter criteria." />
-          ) : (
-            <JournalTable
-              journals={journals}
-              onSelectJournal={setSelectedJournal}
-              pagination={{
-                page,
-                limit,
-                totalCount: pagination?.totalCount || 0,
-                totalPages: pagination?.totalPages || 1,
-                onPageChange: (newPage) => setPage(newPage),
-                onLimitChange: (newLimit) => {
-                  setLimit(newLimit);
-                  setPage(1);
-                },
-              }}
-            />
-          )}
-        </>
-      )}
+        <JournalTable
+          journals={journals}
+          sources={sources}
+          selectedSourceId={selectedSourceId}
+          loading={loading}
+          onSelectJournal={setSelectedJournal}
+        />
 
-      {/* 4. Modal Detail View */}
-      {selectedJournal && (
-        <div 
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200"
-          onClick={() => setSelectedJournal(null)}
-        >
-          <div 
-            className="bg-white rounded-xl p-6 max-w-lg w-full space-y-4 shadow-xl border border-gray-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start border-b pb-3">
-              <h2 className="text-lg font-bold text-gray-900 leading-tight">
-                {selectedJournal.journal_title || selectedJournal.title || "Untitled Journal"}
-              </h2>
-              <button
-                onClick={() => setSelectedJournal(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm text-gray-600">
-              <p>
-                <strong className="text-gray-900">Publisher:</strong>{" "}
-                {selectedJournal.publisher || "—"}
-              </p>
-
-              <p>
-                <strong className="text-gray-900">Status:</strong>{" "}
-                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                  {selectedJournal.active_status || "Active"}
-                </span>
-              </p>
-
-              <div>
-                <strong className="text-gray-900">ISSNs:</strong>
-                {selectedJournal.NEW_JOURNAL_ISSN && selectedJournal.NEW_JOURNAL_ISSN.length > 0 ? (
-                  <ul className="list-disc list-inside mt-1 space-y-0.5 pl-1">
-                    {selectedJournal.NEW_JOURNAL_ISSN.map((i: any, idx: number) => (
-                      <li key={idx}>
-                        <span className="font-mono">{i.issn}</span>{" "}
-                        {i.issn_type ? `(${i.issn_type})` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-400 italic mt-0.5">
-                    {selectedJournal.issn ? `${selectedJournal.issn} (Print)` : "No ISSN available"}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <strong className="text-gray-900">Subject Areas:</strong>
-                <div className="flex flex-wrap gap-1.5 mt-1.5">
-                  {selectedJournal.NEW_JOURNAL_AREA_MAPPING && selectedJournal.NEW_JOURNAL_AREA_MAPPING.length > 0 ? (
-                    selectedJournal.NEW_JOURNAL_AREA_MAPPING.map((m: any, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 bg-gray-100 text-gray-700 text-xs rounded-md border border-gray-200"
-                      >
-                        {m.subject_area?.area_name || "N/A"}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-gray-400 italic">No subject areas listed</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t flex justify-end">
-              <button
-                onClick={() => setSelectedJournal(null)}
-                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors"
-              >
-                Close
-              </button>
-            </div>
+        {/* Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="flex justify-end items-center gap-2 pt-2">
+            <button
+              disabled={page <= 1 || loading}
+              onClick={() => setPage(page - 1)}
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm"
+            >
+              Previous
+            </button>
+            <span className="text-xs font-bold text-gray-600 px-2">
+              {page} / {pagination.totalPages}
+            </span>
+            <button
+              disabled={page >= pagination.totalPages || loading}
+              onClick={() => setPage(page + 1)}
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm"
+            >
+              Next
+            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Detail Modal */}
+      <JournalDetailModal
+        journal={selectedJournal}
+        sources={sources}
+        selectedSourceId={selectedSourceId}
+        onClose={() => setSelectedJournal(null)}
+      />
     </div>
   );
 }

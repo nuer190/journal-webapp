@@ -1,44 +1,50 @@
 import React from "react";
 import { SubjectArea } from "../hooks/useJournalSource";
 
-interface Props {
+interface AreaFilterProps {
   areas: SubjectArea[];
-  selected: number[];
-  onChange: (selected: number[]) => void;
+  selected: (number | string)[];
+  onChange: (selected: (number | string)[]) => void;
 }
 
-export const AreaFilter: React.FC<Props> = ({ areas, selected, onChange }) => {
-  const toggleArea = (id: number) => {
-    if (selected.includes(id)) {
-      onChange(selected.filter((item) => item !== id));
+export const AreaFilter: React.FC<AreaFilterProps> = ({ areas, selected, onChange }) => {
+  const toggleArea = (id: number | string) => {
+    const isSelected = selected.some((item) => String(item) === String(id));
+
+    if (isSelected) {
+      onChange(selected.filter((item) => String(item) !== String(id)));
     } else {
       onChange([...selected, id]);
     }
   };
 
   return (
-    <div className="flex flex-col gap-1">
-      <label className="text-sm font-semibold text-gray-700">
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
         Subject Areas (Multi-select)
       </label>
-      <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 border rounded-md bg-gray-50">
-        {areas.map((a) => {
-          const isChecked = selected.includes(a.id);
-          return (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => toggleArea(a.id)}
-              className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                isChecked
-                  ? "bg-blue-600 text-white"
-                  : "bg-white text-gray-700 border hover:bg-gray-100"
-              }`}
-            >
-              {a.area_name}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap gap-2 max-h-36 overflow-y-auto p-2 border border-gray-200 rounded-xl bg-gray-50/50">
+        {areas.length === 0 ? (
+          <span className="text-xs text-gray-400 p-2">No subject areas available</span>
+        ) : (
+          areas.map((a) => {
+            const isChecked = selected.some((item) => String(item) === String(a.id));
+            return (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => toggleArea(a.id)}
+                className={`px-3 py-1 text-xs rounded-lg font-medium transition-all ${
+                  isChecked
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                {a.area_name}
+              </button>
+            );
+          })
+        )}
       </div>
     </div>
   );

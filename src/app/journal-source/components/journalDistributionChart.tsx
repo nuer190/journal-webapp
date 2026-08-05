@@ -35,33 +35,27 @@ export const JournalDistributionChart: React.FC<Props> = ({
   selectedSourceId,
   sources,
 }) => {
-  // 🟢 1. หาค่า Base RGB ตาม Source ที่เลือก (Match แบบคลุมเครือ เพื่อรองรับชื่อเต็มใน DB)
+  // 1. หาค่า Base RGB ตาม Source ที่เลือก (Match แบบคลุมเครือ เพื่อรองรับชื่อเต็มใน DB)
   const baseRgb = useMemo(() => {
     const selectedSource = sources.find((s) => s.id === selectedSourceId);
     const sourceName = selectedSource ? selectedSource.source_name.toUpperCase() : "";
 
-    // ABDC -> ฟ้า (Sky Blue)
     if (sourceName.includes("ABDC")) {
       return { r: 14, g: 165, b: 233 }; // #0ea5e9
     }
-    // SCOPUS -> เขียว (Emerald/Green)
     if (sourceName.includes("SCOPUS")) {
       return { r: 16, g: 185, b: 129 }; // #10b981
     }
-    // SCIMAGO / SJR -> ส้ม (Orange)
     if (sourceName.includes("SCIMAGO") || sourceName.includes("SJR")) {
       return { r: 249, g: 115, b: 22 }; // #f97316
     }
-    // AJG / CABS -> ม่วง (Purple)
     if (sourceName.includes("AJG") || sourceName.includes("CABS")) {
       return { r: 168, g: 85, b: 247 }; // #a855f7
     }
 
-    // Default (ตอนไม่ได้เลือก Source) -> น้ำเงิน/ฟ้ามาตรฐาน
     return { r: 59, g: 130, b: 246 }; // #3b82f6
   }, [selectedSourceId, sources]);
 
-  // 🟢 2. หาค่า Min / Max เพื่อไล่เฉดสี (Gradient Opacity ตามความเข้มข้นของ Count)
   const { maxCount, minCount } = useMemo(() => {
     if (!data || data.length === 0) return { maxCount: 1, minCount: 0 };
     const counts = data.map((d) => d.count);
@@ -71,7 +65,6 @@ export const JournalDistributionChart: React.FC<Props> = ({
     };
   }, [data]);
 
-  // ฟังก์ชันคำนวณเฉดสี RGBA จากมาก (เข้ม) ไปน้อย (อ่อน)
   const getItemColor = (count: number) => {
     if (maxCount === minCount) {
       return `rgba(${baseRgb.r}, ${baseRgb.g}, ${baseRgb.b}, 1)`;
@@ -125,7 +118,7 @@ export const JournalDistributionChart: React.FC<Props> = ({
               }}
             />
             <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-              {/* 🟢 บังคับ Re-render ด้วย key={`cell-${selectedSourceId}-${index}`} เพื่อให้เปลี่ยนสีทันทีที่เลือก Source */}
+              {/* บังคับ Re-render ด้วย key={`cell-${selectedSourceId}-${index}`} เพื่อให้เปลี่ยนสีทันทีที่เลือก Source */}
               {data.map((entry, index) => (
                 <Cell
                   key={`cell-${selectedSourceId || "default"}-${index}`}

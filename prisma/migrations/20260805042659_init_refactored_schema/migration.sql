@@ -1,6 +1,6 @@
 -- CreateTable
 CREATE TABLE "NEW_SOURCE" (
-    "id" INTEGER NOT NULL,
+    "id" SERIAL NOT NULL,
     "source_name" TEXT NOT NULL,
     "year_version" TEXT,
 
@@ -13,6 +13,9 @@ CREATE TABLE "NEW_JOURNAL" (
     "journal_title" TEXT NOT NULL,
     "publisher" TEXT,
     "active_status" TEXT DEFAULT 'Active',
+    "source_type" TEXT,
+    "coverage" TEXT,
+    "year_inception" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "NEW_JOURNAL_pkey" PRIMARY KEY ("id")
@@ -42,10 +45,13 @@ CREATE TABLE "NEW_SUBJECT_AREA" (
 
 -- CreateTable
 CREATE TABLE "NEW_JOURNAL_AREA_MAPPING" (
+    "id" SERIAL NOT NULL,
     "journal_id" INTEGER NOT NULL,
     "subject_area_id" INTEGER NOT NULL,
+    "source_id" INTEGER NOT NULL,
+    "area_rank" TEXT,
 
-    CONSTRAINT "NEW_JOURNAL_AREA_MAPPING_pkey" PRIMARY KEY ("journal_id","subject_area_id")
+    CONSTRAINT "NEW_JOURNAL_AREA_MAPPING_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -53,7 +59,7 @@ CREATE TABLE "NEW_JOURNAL_RANKING" (
     "id" SERIAL NOT NULL,
     "journal_id" INTEGER NOT NULL,
     "source_id" INTEGER NOT NULL,
-    "rank_value" TEXT NOT NULL,
+    "overall_rank" TEXT NOT NULL,
 
     CONSTRAINT "NEW_JOURNAL_RANKING_pkey" PRIMARY KEY ("id")
 );
@@ -63,6 +69,12 @@ CREATE UNIQUE INDEX "NEW_JOURNAL_ISSN_journal_id_issn_key" ON "NEW_JOURNAL_ISSN"
 
 -- CreateIndex
 CREATE UNIQUE INDEX "NEW_SUBJECT_AREA_source_id_area_name_key" ON "NEW_SUBJECT_AREA"("source_id", "area_name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "NEW_JOURNAL_AREA_MAPPING_journal_id_subject_area_id_source__key" ON "NEW_JOURNAL_AREA_MAPPING"("journal_id", "subject_area_id", "source_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "NEW_JOURNAL_RANKING_journal_id_source_id_key" ON "NEW_JOURNAL_RANKING"("journal_id", "source_id");
 
 -- AddForeignKey
 ALTER TABLE "NEW_JOURNAL_ISSN" ADD CONSTRAINT "NEW_JOURNAL_ISSN_journal_id_fkey" FOREIGN KEY ("journal_id") REFERENCES "NEW_JOURNAL"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -75,6 +87,9 @@ ALTER TABLE "NEW_JOURNAL_AREA_MAPPING" ADD CONSTRAINT "NEW_JOURNAL_AREA_MAPPING_
 
 -- AddForeignKey
 ALTER TABLE "NEW_JOURNAL_AREA_MAPPING" ADD CONSTRAINT "NEW_JOURNAL_AREA_MAPPING_subject_area_id_fkey" FOREIGN KEY ("subject_area_id") REFERENCES "NEW_SUBJECT_AREA"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "NEW_JOURNAL_AREA_MAPPING" ADD CONSTRAINT "NEW_JOURNAL_AREA_MAPPING_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "NEW_SOURCE"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "NEW_JOURNAL_RANKING" ADD CONSTRAINT "NEW_JOURNAL_RANKING_journal_id_fkey" FOREIGN KEY ("journal_id") REFERENCES "NEW_JOURNAL"("id") ON DELETE CASCADE ON UPDATE CASCADE;

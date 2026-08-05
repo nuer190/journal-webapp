@@ -2,102 +2,142 @@
 
 import { useState, useEffect, useCallback } from "react";
 
+export interface Source {
+  id: number;
+  source_name: string;
+  year_version?: string | null;
+}
+
+export interface SubjectArea {
+  id: number;
+  source_id: number;
+  area_code?: string | null;
+  area_name: string;
+  area_group?: string | null;
+  major_group?: string | null;
+}
+
+export interface JournalISSN {
+  id: number;
+  journal_id: number;
+  issn: string;
+  issn_type?: string | null;
+}
+
+export interface JournalRanking {
+  id: number;
+  journal_id: number;
+  source_id: number;
+  overall_rank: string;
+  source?: Source;
+}
+
+export interface JournalAreaMapping {
+  id: number;
+  journal_id: number;
+  subject_area_id: number;
+  source_id: number;
+  area_rank?: string | null;
+  subject_area?: SubjectArea;
+  source?: Source;
+}
+
+export interface NewJournalLog {
+  id?: number;
+  status?: string | null;
+  // เพิ่ม field อื่นๆ ของ NEW_JOURNAL ตามที่มีใน Schema ได้ครับ
+}
+
+export interface Journal {
+  id: number;
+  journal_title: string;
+  title?: string;
+  publisher?: string | null;
+  active_status?: string | null;
+  is_active?: boolean; // เพิ่ม field สำหรับ status
+  source_type?: string | null;
+  coverage?: string | null;
+  year_inception?: string | null;
+  issns?: JournalISSN[];
+  rankings?: JournalRanking[];
+  area_mappings?: JournalAreaMapping[];
+  issn?: string;
+  issnOnline?: string;
+  topRank?: string;
+  new_journal?: NewJournalLog | NewJournalLog[] | null;
+  rankQuality?: { sourceName: string; rankValue: string }[];
+}
+
+export interface ChartDataItem {
+  subject_area_id: number;
+  area_name: string;
+  count: number;
+}
+
+export interface Summary {
+  totalJournals: number;
+  totalPublishers: number;
+  totalAreas: number;
+}
+
+export interface Pagination {
+  totalCount: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export function useJournalSource() {
-  const [sources, setSources] = useState<any[]>([]);
-  const [areas, setAreas] = useState<any[]>([]);
+  const [sources, setSources] = useState<Source[]>([]);
+  const [areas, setAreas] = useState<SubjectArea[]>([]);
   const [ranks, setRanks] = useState<string[]>([]);
-  const [journals, setJournals] = useState<any[]>([]);
-  const [chartData, setChartData] = useState<any[]>([]);
-  
-  // 🟢 1. เพิ่ม State เก็บค่า isTop10
-  const [isTop10, setIsTop10] = useState<boolean>(false);
+  const [journals, setJournals] = useState<Journal[]>([]);
+  const [chartData, setChartData] = useState<ChartDataItem[]>([]);
+  const [summary, setSummary] = useState<Summary>({ totalJournals: 0, totalPublishers: 0, totalAreas: 0 });
+  const [isTop10, setIsTop10] = useState<boolean>(true);
 
-  // 🟢 เพิ่ม State สำหรับเก็บ Summary Stats
-  const [summary, setSummary] = useState<{
-    totalJournals: number;
-    totalPublishers: number;
-    totalAreas: number;
-  }>({
-    totalJournals: 0,
-    totalPublishers: 0,
-    totalAreas: 0,
-  });
-
-  const [selectedSource, setSelectedSourceState] = useState<string>("");
-  const [selectedAreas, setSelectedAreasState] = useState<string[]>([]);
-  const [selectedRanks, setSelectedRanksState] = useState<string[]>([]);
-  const [selectedJournal, setSelectedJournal] = useState<any | null>(null);
-
+  const [selectedSource, setSelectedSource] = useState<string>("");
+  const [selectedAreas, setSelectedAreas] = useState<(string | number)[]>([]);
+  const [selectedRanks, setSelectedRanks] = useState<string[]>([]);
   const [page, setPage] = useState<number>(1);
-  const [limit, setLimit] = useState<number>(10);
-  const [pagination, setPagination] = useState({
-    totalCount: 0,
-    page: 1,
-    limit: 10,
-    totalPages: 1,
-  });
+  const [limit] = useState<number>(10);
+  const [pagination, setPagination] = useState<Pagination>({ totalCount: 0, page: 1, limit: 10, totalPages: 1 });
 
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const setSelectedSource = (sourceId: string) => {
-    setSelectedSourceState(sourceId);
-    setSelectedAreasState([]);
-    setSelectedRanksState([]);
-    setPage(1);
-  };
-
-  const setSelectedAreas = (areas: string[] | ((prev: string[]) => string[])) => {
-    setSelectedAreasState(areas);
-    setPage(1);
-  };
-
-  const setSelectedRanks = (ranks: string[] | ((prev: string[]) => string[])) => {
-    setSelectedRanksState(ranks);
-    setPage(1);
-  };
+  // คำนวณ selectedSourceId เป็น number ให้พร้อมใช้งานทันที
+  const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams();
       if (selectedSource) params.append("sourceId", selectedSource);
-      selectedAreas.forEach((area) => params.append("areaId", area));
-      selectedRanks.forEach((rank) => params.append("rank", rank));
-      params.append("page", page.toString());
-      params.append("limit", limit.toString());
+      selectedAreas.forEach((a) => params.append("areaId", String(a)));
+      selectedRanks.forEach((r) => params.append("rank", r));
+      params.append("page", String(page));
+      params.append("limit", String(limit));
 
       const res = await fetch(`/api/journal-source?${params.toString()}`);
-      const data = await res.json();
+      if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
 
+      const data = await res.json();
       if (data.success) {
-        if (data.sources) setSources(data.sources);
-        if (data.areas) setAreas(data.areas);
-        if (data.ranks) setRanks(data.ranks);
+        setSources(data.sources || []);
+        setAreas(data.areas || []);
+        setRanks(data.ranks || []);
         setJournals(data.journals || []);
         setChartData(data.chartData || []);
-
-        // 🟢 2. ดึงค่า isTop10 จาก Response ของ Backend มาบันทึกลง State
-        setIsTop10(Boolean(data.isTop10));
-
-        if (data.pagination) setPagination(data.pagination);
-
-        // 🟢 ดึงค่า summary จาก API หรือคำนวณสำรองถ้า API ส่งมาให้บางส่วน
-        const totalJournals = data.pagination?.totalCount ?? data.journals?.length ?? 0;
-        const totalAreas = data.chartData?.length ?? data.areas?.length ?? 0;
-        
-        // นับ Publisher แบบที่ไม่ซ้ำกันจากรายการที่ดึงมา
-        const uniquePublishers = new Set(
-          (data.journals || []).map((j: any) => j.publisher).filter(Boolean)
-        ).size;
-
-        setSummary({
-          totalJournals: data.summary?.totalJournals ?? totalJournals,
-          totalPublishers: data.summary?.totalPublishers ?? uniquePublishers,
-          totalAreas: data.summary?.totalAreas ?? totalAreas,
-        });
+        setSummary(data.summary || { totalJournals: 0, totalPublishers: 0, totalAreas: 0 });
+        setIsTop10(data.isTop10 ?? true);
+        setPagination(data.pagination || { totalCount: 0, page: 1, limit: 10, totalPages: 1 });
+      } else {
+        throw new Error(data.error || "Failed to fetch data");
       }
-    } catch (err) {
-      console.error("Failed to fetch journal data:", err);
+    } catch (err: any) {
+      setError(err.message || "An unexpected error occurred");
     } finally {
       setLoading(false);
     }
@@ -113,22 +153,20 @@ export function useJournalSource() {
     ranks,
     journals,
     chartData,
-    isTop10, // 🟢 3. Return ค่า isTop10 ออกไปให้ page.tsx เรียกใช้งาน
     summary,
+    isTop10,
     selectedSource,
+    selectedSourceId, //  ส่งคืน selectedSourceId (ที่เป็น number หรือ undefined) ออกไปให้ page.tsx ใช้
     selectedAreas,
     selectedRanks,
-    loading,
-    selectedJournal,
     page,
-    limit,
     pagination,
-    setPage,
-    setLimit,
+    loading,
+    error,
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
-    setSelectedJournal,
+    setPage,
     refetch: fetchData,
   };
 }
