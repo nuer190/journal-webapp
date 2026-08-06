@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const journalWhereCondition: Prisma.NEW_JOURNALWhereInput =
       andConditions.length > 0 ? { AND: andConditions } : {};
 
-    // 2. Query ตัวเลือก Filter Areas
+    // 2. Query ตัวเลือก Filter Areas ให้ยืดหยุ่นขึ้น
     let areasWhereCondition: Prisma.NEW_SUBJECT_AREAWhereInput | undefined = undefined;
 
     if (sourceId) {
@@ -76,34 +76,20 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
-
-    // ⚡ 3. ตรวจสอบว่าเป็นการกดเปลี่ยนหน้าอย่างเดียวหรือไม่ (ไม่มีการเพิ่ม/ลด filter)
-    const isOnlyPagination = page > 1 && !hasAreaOrRankFilter;
-
-    // 4. ยิง Query ชุดหลักพร้อมกันผ่าน Promise.all
+    // 3. Query ข้อมูลพร้อมกันผ่าน Promise.all
     const [
       totalCount,
-      uniquePublishersCount,
+      allFilteredJournalsForPublishers,
       rawJournals,
       sources,
       filteredAreasOptions,
       filteredRanksOptions,
-      chartSummaryRaw,
     ] = await Promise.all([
-      // Count จำนวน Journal ทั้งหมด
       prisma.nEW_JOURNAL.count({ where: journalWhereCondition }),
-
-      // หา unique publisher ผ่าน DB โดยตรง
-      prisma.nEW_JOURNAL.groupBy({
-        by: ["publisher"],
-        where: {
-          ...journalWhereCondition,
-          publisher: { not: null },
-        },
-      }).then((res) => res.filter((p) => p.publisher && p.publisher.trim() !== "").length),
-
-      // ดึงรายการ Journals เฉพาะ Page นั้นๆ
+      prisma.nEW_JOURNAL.findMany({
+        where: journalWhereCondition,
+        select: { publisher: true },
+      }),
       prisma.nEW_JOURNAL.findMany({
         where: journalWhereCondition,
         skip,
@@ -115,40 +101,41 @@ export async function GET(req: NextRequest) {
           area_mappings: { include: { subject_area: true, source: true } },
         },
       }),
-
-      // ดึง Sources
       prisma.nEW_SOURCE.findMany({ orderBy: { source_name: "asc" } }),
 
-      // Dropdown Subject Areas
       prisma.nEW_SUBJECT_AREA.findMany({
         where: areasWhereCondition,
         orderBy: { area_name: "asc" },
         distinct: ["area_name"],
       }),
 
-      // Dropdown Ranks
       prisma.nEW_JOURNAL_RANKING.findMany({
         where: sourceId ? { source_id: sourceId } : undefined,
         distinct: ["overall_rank"],
         select: { overall_rank: true },
         orderBy: { overall_rank: "asc" },
       }),
-
-      // ⚡ ทำ GroupBy คำนวณกราฟเฉพาะเมื่อจำเป็น (ถ้ากด Next Page อย่างเดียว ให้ข้ามเพื่อเพิ่มความเร็ว)
-      isOnlyPagination
-        ? Promise.resolve([])
-        : prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
-            by: ["subject_area_id"],
-            where: {
-              journal: journalWhereCondition,
-              ...(selectedAreas.length > 0 ? { subject_area_id: { in: selectedAreas } } : {}),
-            },
-            _count: { journal_id: true },
-            orderBy: { _count: { journal_id: "desc" } },
-          }),
     ]);
 
-    // 5. จัดการข้อมูล Chart Data (คำนวณเฉพาะตอนไม่ใช่ Pagination หรือเมื่อมี Data ส่งกลับมา)
+    const uniquePublishersCount = new Set(
+      allFilteredJournalsForPublishers
+        .map((j) => j.publisher)
+        .filter((p): p is string => Boolean(p && p.trim() !== ""))
+    ).size;
+
+    // 4. คำนวณ Chart Data
+    const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
+
+    const chartSummaryRaw = await prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
+      by: ["subject_area_id"],
+      where: {
+        journal: journalWhereCondition,
+        ...(selectedAreas.length > 0 ? { subject_area_id: { in: selectedAreas } } : {}),
+      },
+      _count: { journal_id: true },
+      orderBy: { _count: { journal_id: "desc" } },
+    });
+
     let finalChartSummary = chartSummaryRaw;
     let displayMode: "top10" | "top30" | "all" = "all";
 
@@ -162,34 +149,32 @@ export async function GET(req: NextRequest) {
 
     const chartAreaIds = finalChartSummary.map((c) => c.subject_area_id);
 
-    // ดึงเฉพาะชื่อ Area ที่จำเป็นต้องแสดงใน Chart
-    const chartSubjectAreas = chartAreaIds.length > 0 
-      ? await prisma.nEW_SUBJECT_AREA.findMany({
-          where: { id: { in: chartAreaIds } },
-          select: { id: true, area_name: true },
-        })
-      : [];
+    const chartSubjectAreas = await prisma.nEW_SUBJECT_AREA.findMany({
+      where: { id: { in: chartAreaIds } },
+      select: { id: true, area_name: true },
+    });
 
-    const areaMap = new Map(chartSubjectAreas.map((a) => [a.id, a.area_name]));
+    const chartData = finalChartSummary.map((item) => {
+      const area = chartSubjectAreas.find((a) => a.id === item.subject_area_id);
+      return {
+        subject_area_id: item.subject_area_id,
+        area_name: area ? area.area_name : `Area ${item.subject_area_id}`,
+        count: item._count.journal_id,
+      };
+    });
 
-    const chartData = finalChartSummary.map((item) => ({
-      subject_area_id: item.subject_area_id,
-      area_name: areaMap.get(item.subject_area_id) || `Area ${item.subject_area_id}`,
-      count: item._count.journal_id,
-    }));
-
-    // 6. Formatting Journal Items
+    // 5. Formatting Journal Items (ส่งออก active_status และ Rank ของทุก Source อย่างถูกต้อง)
     const formattedJournals = rawJournals.map((j) => {
-      let issnPrint = "—";
-      let issnOnline = "—";
-
-      if (j.issns && j.issns.length > 0) {
-        const printItem = j.issns.find((i) => i.issn_type?.toUpperCase().includes("PRINT"));
-        issnPrint = printItem?.issn || j.issns[0]?.issn || "—";
-
-        const onlineItem = j.issns.find((i) => i.issn_type?.toUpperCase().match(/(ONLINE|EISSN)/));
-        issnOnline = onlineItem?.issn || (j.issns.length > 1 ? j.issns[1]?.issn : "—") || "—";
-      }
+      const issnPrint =
+        j.issns?.find((i) => i.issn_type?.toUpperCase().includes("PRINT"))?.issn ||
+        j.issns?.[0]?.issn ||
+        "—";
+      const issnOnline =
+        j.issns?.find((i) =>
+          i.issn_type?.toUpperCase().match(/(ONLINE|EISSN)/)
+        )?.issn ||
+        j.issns?.[1]?.issn ||
+        "—";
 
       const currentRanks = j.rankings || [];
       const rankQuality = currentRanks.map((r) => ({
@@ -198,46 +183,41 @@ export async function GET(req: NextRequest) {
         rankValue: r.overall_rank,
       }));
 
+      // เช็ค active_status สำหรับ Scopus
+      const activeStatus = j.active_status || "Active";
+
       return {
         ...j,
         title: j.journal_title,
         issn: issnPrint,
         issnOnline: issnOnline,
-        active_status: j.active_status || "Active",
+        active_status: activeStatus,
         rankQuality,
         topRank: currentRanks[0]?.overall_rank || "—",
       };
     });
 
-    // 7. ส่ง Response พร้อม Cache Header
-    return NextResponse.json(
-      {
-        success: true,
-        summary: {
-          totalJournals: totalCount,
-          totalPublishers: uniquePublishersCount,
-          totalAreas: chartSummaryRaw.length,
-        },
-        isTop10: displayMode === "top10",
-        displayLimit: finalChartSummary.length,
-        sources,
-        areas: filteredAreasOptions,
-        ranks: filteredRanksOptions.map((r) => r.overall_rank).filter(Boolean),
-        journals: formattedJournals,
-        chartData,
-        pagination: {
-          totalCount,
-          page,
-          limit,
-          totalPages: Math.ceil(totalCount / limit),
-        },
+    return NextResponse.json({
+      success: true,
+      summary: {
+        totalJournals: totalCount,
+        totalPublishers: uniquePublishersCount,
+        totalAreas: chartSummaryRaw.length,
       },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=59",
-        },
-      }
-    );
+      isTop10: displayMode === "top10",
+      displayLimit: finalChartSummary.length,
+      sources,
+      areas: filteredAreasOptions,
+      ranks: filteredRanksOptions.map((r) => r.overall_rank).filter(Boolean),
+      journals: formattedJournals,
+      chartData,
+      pagination: {
+        totalCount,
+        page,
+        limit,
+        totalPages: Math.ceil(totalCount / limit),
+      },
+    });
   } catch (error) {
     console.error("[JOURNALS_GET_ERROR]", error);
     return NextResponse.json(

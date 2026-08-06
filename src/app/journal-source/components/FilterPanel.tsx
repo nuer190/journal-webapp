@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { useDebounce } from "use-debounce"; // ⚡ เพิ่มการ import
 import { Source, SubjectArea } from "../hooks/useJournalSource";
 
 interface FilterPanelProps {
@@ -28,7 +27,6 @@ export function FilterPanel({
   onRankChange,
 }: FilterPanelProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm] = useDebounce(searchTerm, 200); // ⚡ หน่วงเวลาค้นหาใน UI 200ms
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -43,25 +41,11 @@ export function FilterPanel({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🟢 ใช้ debouncedSearchTerm ในการกรอง Subject Areas
   const filteredAreas = useMemo(() => {
-    if (!selectedSource) return [];
-
-    const searchLower = debouncedSearchTerm.toLowerCase();
-    return areas.filter((a) => {
-      // 1. เช็คว่า source_id ของ Area ตรงกับ Source ที่เลือกหรือไม่
-      const isSourceMatch = a.source_id
-        ? String(a.source_id) === String(selectedSource)
-        : true;
-
-      // 2. เช็คค้นหาจาก Search Term ที่ผ่านการ Debounce แล้ว
-      const isSearchMatch = searchLower
-        ? a.area_name.toLowerCase().includes(searchLower)
-        : true;
-
-      return isSourceMatch && isSearchMatch;
-    });
-  }, [areas, selectedSource, debouncedSearchTerm]);
+    return areas.filter((a) =>
+      a.area_name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [areas, searchTerm]);
 
   const handleAreaToggle = (areaId: string | number) => {
     const areaIdStr = String(areaId);
@@ -93,9 +77,7 @@ export function FilterPanel({
           <select
             value={selectedSource}
             onChange={(e) => {
-              const newSourceId = e.target.value;
-              onSourceChange(newSourceId);
-              // ล้างค่าเมื่อมีการเปลี่ยน Source
+              onSourceChange(e.target.value);
               onAreaChange([]);
               onRankChange([]);
               setSearchTerm("");
@@ -117,10 +99,8 @@ export function FilterPanel({
             Ranks
           </label>
           <div className="flex flex-wrap gap-1 min-h-[40px] items-center p-1 border border-gray-200 rounded-xl bg-gray-50/50">
-            {!selectedSource ? (
+            {ranks.length === 0 ? (
               <span className="text-xs text-gray-400 px-3">Select source first</span>
-            ) : ranks.length === 0 ? (
-              <span className="text-xs text-gray-400 px-3">No ranks available</span>
             ) : (
               ranks.map((r) => {
                 const isSelected = selectedRanks.includes(r);
@@ -162,12 +142,10 @@ export function FilterPanel({
               placeholder={selectedSource ? "🔍 Search subject area..." : "Select source first"}
               disabled={!selectedSource}
               value={searchTerm}
-              onFocus={() => {
-                if (selectedSource) setIsOpen(true);
-              }}
+              onFocus={() => setIsOpen(true)}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                if (selectedSource) setIsOpen(true);
+                setIsOpen(true);
               }}
               className="w-full h-10 pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed shadow-sm transition-all"
             />
@@ -187,9 +165,7 @@ export function FilterPanel({
             <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-50 p-1.5 max-h-56 overflow-y-auto space-y-1">
               {filteredAreas.length === 0 ? (
                 <div className="p-3 text-center text-xs text-gray-400">
-                  {searchTerm
-                    ? "No matching subject areas found"
-                    : "No subject areas for this source"}
+                  No matching subject areas found
                 </div>
               ) : (
                 filteredAreas.map((a) => {

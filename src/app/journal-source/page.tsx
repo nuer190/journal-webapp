@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { useJournalSource, Journal } from "./hooks/useJournalSource";
 import { FilterPanel } from "./components/FilterPanel";
 import { SummaryCards } from "./components/SummaryCards";
@@ -32,6 +32,16 @@ export default function JournalSourcePage() {
   } = useJournalSource();
 
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
+
+  // ⚡ ใช้ useCallback เพื่อให้ props `onSelectJournal` ไม่ถูกสร้างใหม่ทุกครั้งที่ Re-render
+  // ช่วยป้องกันไม่ให้ JournalTable (ที่ใช้ React.memo) Re-render โดยไม่จำเป็น
+  const handleSelectJournal = useCallback((journal: Journal) => {
+    setSelectedJournal(journal);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setSelectedJournal(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
@@ -68,7 +78,7 @@ export default function JournalSourcePage() {
       {/* Summary Stat Cards */}
       <SummaryCards summary={summary} loading={loading} />
 
-      {/* Chart Section */}
+      {/* Chart Section - แสดงผลค้างไว้ตลอด ไม่ unmount แม้ตารางจะอยู่สถานะ loading */}
       <ChartCard
         data={chartData}
         isTop10={isTop10}
@@ -90,7 +100,7 @@ export default function JournalSourcePage() {
           sources={sources}
           selectedSourceId={selectedSourceId}
           loading={loading}
-          onSelectJournal={setSelectedJournal}
+          onSelectJournal={handleSelectJournal}
         />
 
         {/* Pagination Controls */}
@@ -99,7 +109,7 @@ export default function JournalSourcePage() {
             <button
               disabled={page <= 1 || loading}
               onClick={() => setPage(page - 1)}
-              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm"
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm cursor-pointer"
             >
               Previous
             </button>
@@ -109,7 +119,7 @@ export default function JournalSourcePage() {
             <button
               disabled={page >= pagination.totalPages || loading}
               onClick={() => setPage(page + 1)}
-              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm"
+              className="px-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 disabled:opacity-50 hover:bg-gray-50 transition-all shadow-sm cursor-pointer"
             >
               Next
             </button>
@@ -122,7 +132,7 @@ export default function JournalSourcePage() {
         journal={selectedJournal}
         sources={sources}
         selectedSourceId={selectedSourceId}
-        onClose={() => setSelectedJournal(null)}
+        onClose={handleCloseModal}
       />
     </div>
   );
