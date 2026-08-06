@@ -54,7 +54,7 @@ export default function Overview() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-heading text-xl">Top Journals</CardTitle>
+          <CardTitle className="font-heading text-xl">Journals list (Preview)</CardTitle>
         </CardHeader>
         <CardContent>
           {journalsLoading ? (

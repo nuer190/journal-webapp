@@ -10,6 +10,43 @@ interface JournalDetailModalProps {
   onClose: () => void;
 }
 
+// 🟢 Helper: จัดการใส่ขีด (-) ให้กับ ISSN 8 หลัก เช่น 26181007 -> 2618-1007
+function formatIssn(issnStr?: string): string {
+  if (!issnStr || issnStr === "—") return "—";
+  const clean = issnStr.replace(/[^0-9Xx]/g, "");
+  if (clean.length === 8) {
+    return `${clean.slice(0, 4)}-${clean.slice(4).toUpperCase()}`;
+  }
+  return issnStr;
+}
+
+// 🟢 Helper: ดึง Print และ Online ISSN แบบเดียวกับ Logic ใน JournalTable
+function getIssnPair(journal: Journal) {
+  let rawPrint =
+    journal.issn ||
+    journal.issns?.find((i) => i.issn_type?.toUpperCase().includes("PRINT"))?.issn;
+
+  let rawOnline =
+    journal.issnOnline ||
+    (journal as { eissn?: string }).eissn ||
+    journal.issns?.find((i) =>
+      i.issn_type?.toUpperCase().match(/(ONLINE|EISSN|ELECTRONIC)/)
+    )?.issn;
+
+  // Fallback กรณี issns ใน Modal มีแค่ array แต่ไม่ได้กำกับ type ชัดเจน
+  if (!rawPrint && !rawOnline && journal.issns && journal.issns.length > 0) {
+    rawPrint = journal.issns[0]?.issn;
+    if (journal.issns.length > 1) {
+      rawOnline = journal.issns[1]?.issn;
+    }
+  }
+
+  return {
+    printIssn: formatIssn(rawPrint),
+    onlineIssn: formatIssn(rawOnline),
+  };
+}
+
 export function JournalDetailModal({
   journal,
   sources = [],
@@ -25,13 +62,16 @@ export function JournalDetailModal({
   const selectedSourceName = currentSource?.source_name || "All Sources";
   const sourceNameUpper = selectedSourceName.toUpperCase();
 
-  // 2. กำกับ Rank: ดึงเฉพาะ Rank ที่ผูกกับ selectedSourceId ตรงๆ เท่านั้น
+  // 🟢 ตรวจสอบว่า Source ปัจจุบันคือ ABDC หรือไม่
+  const isAbdc = sourceNameUpper.includes("ABDC");
+
+  // 2. กำกับ Rank: ดึงเฉพาะ Rank ที่ผูกกับ selectedSourceId
   const matchedRankings = (journal.rankings || []).filter((r) => {
     if (!selectedSourceId) return true;
     return Number(r.source_id) === Number(selectedSourceId);
   });
 
-  // แสดง Rank ของ Source นั้นๆ (ถ้าเป็น Scimago/SJR เติม Q ให้ถ้ายังไม่มี)
+  // แสดง Rank ของ Source นั้นๆ
   let sourceRankDisplay = matchedRankings[0]?.overall_rank || "—";
   if (
     sourceRankDisplay !== "—" &&
@@ -42,17 +82,19 @@ export function JournalDetailModal({
     }
   }
 
-  // 3. กำกับ Subject Area: ดึงเฉพาะ Area ที่ผูกกับ selectedSourceId เท่านั้น
+  // 3. กำกับ Subject Area: ดึงเฉพาะ Area ที่ผูกกับ selectedSourceId
   const filteredAreaMappings = (journal.area_mappings || []).filter((m) => {
-    if (!selectedSourceId) return true; // ถ้าไม่ได้เลือก Filter ให้แสดงหมด
+    if (!selectedSourceId) return true;
 
-    // เช็ค source_id ทั้งฝั่ง mapping และฝั่ง subject_area
     const mappingSourceId = Number(m.source_id);
     const areaSourceId = Number(m.subject_area?.source_id);
     const targetSourceId = Number(selectedSourceId);
 
     return mappingSourceId === targetSourceId || areaSourceId === targetSourceId;
   });
+
+  // 🟢 ดึงค่า Print และ Online ISSN จาก Logic เดียวกับ Table
+  const { printIssn, onlineIssn } = getIssnPair(journal);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -89,8 +131,8 @@ export function JournalDetailModal({
         {/* Modal Body */}
         <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto text-xs text-gray-700">
           
-          {/* Metadata Grid & Rank ประจำ Source */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-gray-50/80 p-4 rounded-xl border border-gray-100">
+          {/* Metadata Grid (ABDC = Best Rank, Status, Inception Year / อื่นๆ = Best Rank, Status, Coverage) */}
+          <div className="grid grid-cols-3 gap-4 bg-gray-50/80 p-4 rounded-xl border border-gray-100">
             <div>
               <span className="text-gray-400 block font-medium">
                 Best Rank ({selectedSourceName})
@@ -99,48 +141,60 @@ export function JournalDetailModal({
                 {sourceRankDisplay}
               </span>
             </div>
+
             <div>
               <span className="text-gray-400 block font-medium">Status</span>
               <span className="font-semibold text-gray-800">
                 {journal.active_status || "Active"}
               </span>
             </div>
-            <div>
-              <span className="text-gray-400 block font-medium">Coverage</span>
-              <span className="font-semibold text-gray-800">
-                {journal.coverage || "—"}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-400 block font-medium">Inception Year</span>
-              <span className="font-semibold text-gray-800">
-                {journal.year_inception || "—"}
-              </span>
-            </div>
+
+            {isAbdc ? (
+              <div>
+                <span className="text-gray-400 block font-medium">Inception Year</span>
+                <span className="font-semibold text-gray-800">
+                  {journal.year_inception || "—"}
+                </span>
+              </div>
+            ) : (
+              <div>
+                <span className="text-gray-400 block font-medium">Coverage</span>
+                <span className="font-semibold text-gray-800">
+                  {journal.coverage || "—"}
+                </span>
+              </div>
+            )}
           </div>
 
-          {/* ISSN Identifiers */}
+          {/* ISSN Identifiers (ดึงตาม Logic เดียวกับ Table พร้อมใส่ Dash คั่น) */}
           <div className="space-y-2">
             <h4 className="font-bold text-gray-900 uppercase text-[11px] tracking-wider">
               ISSN Identifiers
             </h4>
             <div className="flex flex-wrap gap-2">
-              {journal.issns && journal.issns.length > 0 ? (
-                journal.issns.map((i) => (
-                  <span
-                    key={i.id}
-                    className="bg-gray-100 px-3 py-1 rounded-lg border border-gray-200 font-mono text-gray-800"
-                  >
-                    {i.issn_type || "ISSN"}: {i.issn}
-                  </span>
-                ))
+              {printIssn !== "—" || onlineIssn !== "—" ? (
+                <>
+                  <div className="bg-slate-50 border border-slate-200 text-slate-800 px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2">
+                    <span className="font-sans font-bold text-[10px] text-gray-500 uppercase">
+                      PRINT (P-ISSN):
+                    </span>
+                    <span className="font-semibold">{printIssn}</span>
+                  </div>
+
+                  <div className="bg-blue-50/60 border border-blue-100 text-blue-900 px-3 py-1.5 rounded-lg font-mono text-xs flex items-center gap-2">
+                    <span className="font-sans font-bold text-[10px] text-blue-600 uppercase">
+                      ONLINE (E-ISSN):
+                    </span>
+                    <span className="font-semibold">{onlineIssn}</span>
+                  </div>
+                </>
               ) : (
                 <span className="text-gray-400">No ISSN data available</span>
               )}
             </div>
           </div>
 
-          {/* Subject Areas ประจำ Source ที่เลือก */}
+          {/* Subject Areas */}
           <div className="space-y-2">
             <h4 className="font-bold text-gray-900 uppercase text-[11px] tracking-wider">
               Subject Areas ({selectedSourceName})
@@ -155,7 +209,6 @@ export function JournalDetailModal({
                     <span className="font-medium text-gray-800">
                       {m.subject_area?.area_name || `Area ID: ${m.subject_area_id}`}
                     </span>
-                    {/* แนบ Rank ประจำ Area ย่อยถ้ามี */}
                     {m.area_rank && (
                       <span className="bg-amber-50 text-amber-700 font-bold px-2 py-0.5 rounded border border-amber-200 text-[10px]">
                         Rank: {m.area_rank}

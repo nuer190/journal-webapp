@@ -98,6 +98,7 @@ export default function AnalyticsPage() {
         })}
       </div>
 
+      {/* 1. Source Distribution */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">Source Distribution</CardTitle>
@@ -110,23 +111,22 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* 2. 🟢 ย้าย Database Coverage by Major Group ขึ้นมาตรงนี้ */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">
-            Scopus Coverage Status
+            Database Coverage by Major Group
           </CardTitle>
           <CardDescription>
-            Active vs inactive journals and source types in Scopus
+            How many journals in each major group appear in each database
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ScopusStatusChart
-            byStatus={data?.scopusStatus?.byStatus ?? []}
-            bySourceType={data?.scopusStatus?.bySourceType ?? []}
-          />
+          <DbCoverageChart data={data?.dbCoverage ?? []} />
         </CardContent>
       </Card>
 
+      {/* 3. Rank Distribution by Source */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">
@@ -141,6 +141,7 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* 4. Journals by Major Group */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">
@@ -155,6 +156,7 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* 5. Top 10 Areas */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">Top 10 Areas</CardTitle>
@@ -167,6 +169,7 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* 6. Area Groups */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">Area Groups</CardTitle>
@@ -179,17 +182,21 @@ export default function AnalyticsPage() {
         </CardContent>
       </Card>
 
+      {/* 7. 🟢 ย้าย Scopus Coverage Status มาไว้ล่างสุดตรงนี้ */}
       <Card>
         <CardHeader>
           <CardTitle className="font-heading text-xl">
-            Database Coverage by Major Group
+            Scopus Coverage Status
           </CardTitle>
           <CardDescription>
-            How many journals in each major group appear in each database
+            Active vs inactive journals and source types in Scopus
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <DbCoverageChart data={data?.dbCoverage ?? []} />
+          <ScopusStatusChart
+            byStatus={data?.scopusStatus?.byStatus ?? []}
+            bySourceType={data?.scopusStatus?.bySourceType ?? []}
+          />
         </CardContent>
       </Card>
     </div>

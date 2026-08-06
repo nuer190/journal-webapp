@@ -41,11 +41,22 @@ export function FilterPanel({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // 🟢 กรอง Subject Areas เฉพาะที่ตรงกับ selectedSource และ searchTerm
   const filteredAreas = useMemo(() => {
-    return areas.filter((a) =>
-      a.area_name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [areas, searchTerm]);
+    if (!selectedSource) return [];
+
+    return areas.filter((a) => {
+      // 1. เช็คว่า source_id ของ Area ตรงกับ Source ที่เลือกหรือไม่
+      const isSourceMatch = a.source_id
+        ? String(a.source_id) === String(selectedSource)
+        : true; // เผื่อกรณี parent component กรองมาให้อยู่แล้ว
+
+      // 2. เช็คค้นหาจาก Search Term
+      const isSearchMatch = a.area_name.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return isSourceMatch && isSearchMatch;
+    });
+  }, [areas, selectedSource, searchTerm]);
 
   const handleAreaToggle = (areaId: string | number) => {
     const areaIdStr = String(areaId);
@@ -77,7 +88,9 @@ export function FilterPanel({
           <select
             value={selectedSource}
             onChange={(e) => {
-              onSourceChange(e.target.value);
+              const newSourceId = e.target.value;
+              onSourceChange(newSourceId);
+              // ล้างค่าเมื่อมีการเปลี่ยน Source
               onAreaChange([]);
               onRankChange([]);
               setSearchTerm("");
@@ -99,8 +112,10 @@ export function FilterPanel({
             Ranks
           </label>
           <div className="flex flex-wrap gap-1 min-h-[40px] items-center p-1 border border-gray-200 rounded-xl bg-gray-50/50">
-            {ranks.length === 0 ? (
+            {!selectedSource ? (
               <span className="text-xs text-gray-400 px-3">Select source first</span>
+            ) : ranks.length === 0 ? (
+              <span className="text-xs text-gray-400 px-3">No ranks available</span>
             ) : (
               ranks.map((r) => {
                 const isSelected = selectedRanks.includes(r);
@@ -142,10 +157,12 @@ export function FilterPanel({
               placeholder={selectedSource ? "🔍 Search subject area..." : "Select source first"}
               disabled={!selectedSource}
               value={searchTerm}
-              onFocus={() => setIsOpen(true)}
+              onFocus={() => {
+                if (selectedSource) setIsOpen(true);
+              }}
               onChange={(e) => {
                 setSearchTerm(e.target.value);
-                setIsOpen(true);
+                if (selectedSource) setIsOpen(true);
               }}
               className="w-full h-10 pl-3 pr-8 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed shadow-sm transition-all"
             />
@@ -165,7 +182,9 @@ export function FilterPanel({
             <div className="absolute left-0 right-0 top-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl z-50 p-1.5 max-h-56 overflow-y-auto space-y-1">
               {filteredAreas.length === 0 ? (
                 <div className="p-3 text-center text-xs text-gray-400">
-                  No matching subject areas found
+                  {searchTerm
+                    ? "No matching subject areas found"
+                    : "No subject areas for this source"}
                 </div>
               ) : (
                 filteredAreas.map((a) => {
