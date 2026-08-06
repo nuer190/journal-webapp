@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useDebounce } from "use-debounce"; // ⚡ เพิ่มการ import
 import { Source, SubjectArea } from "../hooks/useJournalSource";
 
 interface FilterPanelProps {
@@ -27,6 +28,7 @@ export function FilterPanel({
   onRankChange,
 }: FilterPanelProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 200); // ⚡ หน่วงเวลาค้นหาใน UI 200ms
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -41,22 +43,25 @@ export function FilterPanel({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // 🟢 กรอง Subject Areas เฉพาะที่ตรงกับ selectedSource และ searchTerm
+  // 🟢 ใช้ debouncedSearchTerm ในการกรอง Subject Areas
   const filteredAreas = useMemo(() => {
     if (!selectedSource) return [];
 
+    const searchLower = debouncedSearchTerm.toLowerCase();
     return areas.filter((a) => {
       // 1. เช็คว่า source_id ของ Area ตรงกับ Source ที่เลือกหรือไม่
       const isSourceMatch = a.source_id
         ? String(a.source_id) === String(selectedSource)
-        : true; // เผื่อกรณี parent component กรองมาให้อยู่แล้ว
+        : true;
 
-      // 2. เช็คค้นหาจาก Search Term
-      const isSearchMatch = a.area_name.toLowerCase().includes(searchTerm.toLowerCase());
+      // 2. เช็คค้นหาจาก Search Term ที่ผ่านการ Debounce แล้ว
+      const isSearchMatch = searchLower
+        ? a.area_name.toLowerCase().includes(searchLower)
+        : true;
 
       return isSourceMatch && isSearchMatch;
     });
-  }, [areas, selectedSource, searchTerm]);
+  }, [areas, selectedSource, debouncedSearchTerm]);
 
   const handleAreaToggle = (areaId: string | number) => {
     const areaIdStr = String(areaId);

@@ -20,7 +20,8 @@ const SOURCE_BADGE_STYLE: Record<string, { bg: string; text: string; border: str
   DEFAULT: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
 };
 
-export function JournalTable({
+// 1. เปลี่ยนการประกาศฟังก์ชันจาก export function JournalTable เป็น JournalTableComponent
+function JournalTableComponent({
   journals = [],
   sources = [],
   selectedSourceId,
@@ -39,7 +40,7 @@ export function JournalTable({
   };
 
   const getScopusStatus = (journal: Journal) => {
-  // 1. ดึง status จาก new_journal (รองรับทั้งกรณีที่เป็น Object หรือ Array)
+    // 1. ดึง status จาก new_journal (รองรับทั้งกรณีที่เป็น Object หรือ Array)
     const logObj = Array.isArray(journal.new_journal)
       ? journal.new_journal[0]
       : journal.new_journal;
@@ -229,3 +230,6 @@ export function JournalTable({
     </div>
   );
 }
+
+// 2. Export Component ด้วย React.memo
+export const JournalTable = React.memo(JournalTableComponent);

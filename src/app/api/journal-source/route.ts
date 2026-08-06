@@ -78,10 +78,13 @@ export async function GET(req: NextRequest) {
 
     const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
 
-    // 3. ยิง Query ชุดหลักพร้อมกันผ่าน Promise.all
+    // ⚡ 3. ตรวจสอบว่าเป็นการกดเปลี่ยนหน้าอย่างเดียวหรือไม่ (ไม่มีการเพิ่ม/ลด filter)
+    const isOnlyPagination = page > 1 && !hasAreaOrRankFilter;
+
+    // 4. ยิง Query ชุดหลักพร้อมกันผ่าน Promise.all
     const [
       totalCount,
-      uniquePublishersCount, // ⚡ ปรับเป็น DISTINCT count ใน DB ไม่ต้องดึงมาทำใน JS
+      uniquePublishersCount,
       rawJournals,
       sources,
       filteredAreasOptions,
@@ -91,7 +94,7 @@ export async function GET(req: NextRequest) {
       // Count จำนวน Journal ทั้งหมด
       prisma.nEW_JOURNAL.count({ where: journalWhereCondition }),
 
-      // ⚡ หา unique publisher ผ่าน DB โดยตรง (เร็วกว่าการเอามา new Set ใน Node.js มหาศาล)
+      // หา unique publisher ผ่าน DB โดยตรง
       prisma.nEW_JOURNAL.groupBy({
         by: ["publisher"],
         where: {
@@ -131,19 +134,21 @@ export async function GET(req: NextRequest) {
         orderBy: { overall_rank: "asc" },
       }),
 
-      // GroupBy ทำ Chart
-      prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
-        by: ["subject_area_id"],
-        where: {
-          journal: journalWhereCondition,
-          ...(selectedAreas.length > 0 ? { subject_area_id: { in: selectedAreas } } : {}),
-        },
-        _count: { journal_id: true },
-        orderBy: { _count: { journal_id: "desc" } },
-      }),
+      // ⚡ ทำ GroupBy คำนวณกราฟเฉพาะเมื่อจำเป็น (ถ้ากด Next Page อย่างเดียว ให้ข้ามเพื่อเพิ่มความเร็ว)
+      isOnlyPagination
+        ? Promise.resolve([])
+        : prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
+            by: ["subject_area_id"],
+            where: {
+              journal: journalWhereCondition,
+              ...(selectedAreas.length > 0 ? { subject_area_id: { in: selectedAreas } } : {}),
+            },
+            _count: { journal_id: true },
+            orderBy: { _count: { journal_id: "desc" } },
+          }),
     ]);
 
-    // 4. จัดการข้อมูล Chart Data (ดึงเฉพาะชื่อ Area ของ ID ที่ใช้ตัด Slice ออกมาแล้วเท่านั้น)
+    // 5. จัดการข้อมูล Chart Data (คำนวณเฉพาะตอนไม่ใช่ Pagination หรือเมื่อมี Data ส่งกลับมา)
     let finalChartSummary = chartSummaryRaw;
     let displayMode: "top10" | "top30" | "all" = "all";
 
@@ -157,7 +162,7 @@ export async function GET(req: NextRequest) {
 
     const chartAreaIds = finalChartSummary.map((c) => c.subject_area_id);
 
-    // ⚡ ดึงเฉพาะชื่อ Area ที่จำเป็นต้องแสดงใน Chart (ไม่เกิน 10 หรือ 30 ตัว)
+    // ดึงเฉพาะชื่อ Area ที่จำเป็นต้องแสดงใน Chart
     const chartSubjectAreas = chartAreaIds.length > 0 
       ? await prisma.nEW_SUBJECT_AREA.findMany({
           where: { id: { in: chartAreaIds } },
@@ -165,7 +170,6 @@ export async function GET(req: NextRequest) {
         })
       : [];
 
-    // Map ข้อมูลเข้ากับ ID
     const areaMap = new Map(chartSubjectAreas.map((a) => [a.id, a.area_name]));
 
     const chartData = finalChartSummary.map((item) => ({
@@ -174,7 +178,7 @@ export async function GET(req: NextRequest) {
       count: item._count.journal_id,
     }));
 
-    // 5. Formatting Journal Items (ใช้ Map เพื่อให้การค้นหาเป็น O(1))
+    // 6. Formatting Journal Items
     const formattedJournals = rawJournals.map((j) => {
       let issnPrint = "—";
       let issnOnline = "—";
@@ -205,7 +209,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 6. ส่ง Response พร้อม Cache Header
+    // 7. ส่ง Response พร้อม Cache Header
     return NextResponse.json(
       {
         success: true,
@@ -230,7 +234,6 @@ export async function GET(req: NextRequest) {
       },
       {
         headers: {
-          // ⚡ เพิ่ม Cache Control ให้ Edge/Vercel เก็บ Cache ไว้สั้นๆ ช่วยลด Load Server ตอนยิงซ้ำ
           "Cache-Control": "public, s-maxage=10, stale-while-revalidate=59",
         },
       }

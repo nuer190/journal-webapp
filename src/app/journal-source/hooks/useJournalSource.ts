@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useDebounce } from "use-debounce";
 
 export interface Source {
   id: number;
@@ -45,7 +46,6 @@ export interface JournalAreaMapping {
 export interface NewJournalLog {
   id?: number;
   status?: string | null;
-  // เพิ่ม field อื่นๆ ของ NEW_JOURNAL ตามที่มีใน Schema ได้ครับ
 }
 
 export interface Journal {
@@ -54,7 +54,7 @@ export interface Journal {
   title?: string;
   publisher?: string | null;
   active_status?: string | null;
-  is_active?: boolean; // เพิ่ม field สำหรับ status
+  is_active?: boolean;
   source_type?: string | null;
   coverage?: string | null;
   year_inception?: string | null;
@@ -106,28 +106,50 @@ export function useJournalSource() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ⚡ Debounce ค่าที่กดจาก FilterPanel เพื่อลดจำนวนครั้งการยิง API (ชะลอไว้ 350ms)
+  const [debouncedAreas] = useDebounce(selectedAreas, 350);
+  const [debouncedRanks] = useDebounce(selectedRanks, 350);
+
   // คำนวณ selectedSourceId เป็น number ให้พร้อมใช้งานทันที
   const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
 
+  // ป้องกัน Race Condition กรณีที่ User กดยื่น Request รัวๆ
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const fetchData = useCallback(async () => {
+    // ยกเลิก Request ก่อนหน้าหากยังทำงานไม่เสร็จ
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     setLoading(true);
     setError(null);
+
     try {
       const params = new URLSearchParams();
       if (selectedSource) params.append("sourceId", selectedSource);
-      selectedAreas.forEach((a) => params.append("areaId", String(a)));
-      selectedRanks.forEach((r) => params.append("rank", r));
+      
+      // ใช้ค่าที่ผ่าน Debounce แล้วยิง API
+      debouncedAreas.forEach((a) => params.append("areaId", String(a)));
+      debouncedRanks.forEach((r) => params.append("rank", r));
+      
       params.append("page", String(page));
       params.append("limit", String(limit));
 
-      const res = await fetch(`/api/journal-source?${params.toString()}`);
+      const res = await fetch(`/api/journal-source?${params.toString()}`, {
+        signal: abortControllerRef.current.signal,
+      });
+
       if (!res.ok) throw new Error(`API Error: ${res.statusText}`);
 
       const data = await res.json();
       if (data.success) {
-        setSources(data.sources || []);
-        setAreas(data.areas || []);
-        setRanks(data.ranks || []);
+        // อัปเดต Filter Options เฉพาะตอนที่มีค่าส่งกลับมา (ป้องกัน Options หายตอนกดเปลี่ยนหน้า)
+        if (data.sources && data.sources.length > 0) setSources(data.sources);
+        if (data.areas && data.areas.length > 0) setAreas(data.areas);
+        if (data.ranks && data.ranks.length > 0) setRanks(data.ranks);
+
         setJournals(data.journals || []);
         setChartData(data.chartData || []);
         setSummary(data.summary || { totalJournals: 0, totalPublishers: 0, totalAreas: 0 });
@@ -137,15 +159,23 @@ export function useJournalSource() {
         throw new Error(data.error || "Failed to fetch data");
       }
     } catch (err: any) {
-      setError(err.message || "An unexpected error occurred");
+      if (err.name !== "AbortError") {
+        setError(err.message || "An unexpected error occurred");
+      }
     } finally {
       setLoading(false);
     }
-  }, [selectedSource, selectedAreas, selectedRanks, page, limit]);
+  }, [selectedSource, debouncedAreas, debouncedRanks, page, limit]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Reset หน้าปัจจุบันเป็น 1 เมื่อมีการเปลี่ยน Source
+  const handleSourceChange = (sourceId: string) => {
+    setSelectedSource(sourceId);
+    setPage(1);
+  };
 
   return {
     sources,
@@ -156,14 +186,14 @@ export function useJournalSource() {
     summary,
     isTop10,
     selectedSource,
-    selectedSourceId, //  ส่งคืน selectedSourceId (ที่เป็น number หรือ undefined) ออกไปให้ page.tsx ใช้
+    selectedSourceId, // ส่งคืน selectedSourceId (ที่เป็น number หรือ undefined)
     selectedAreas,
     selectedRanks,
     page,
     pagination,
     loading,
     error,
-    setSelectedSource,
+    setSelectedSource: handleSourceChange,
     setSelectedAreas,
     setSelectedRanks,
     setPage,
