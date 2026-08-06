@@ -548,7 +548,6 @@ function RankTierReference() {
                   <TableHead>ABDC</TableHead>
                   <TableHead>AJG</TableHead>
                   <TableHead>Scimago</TableHead>
-                  <TableHead>Description</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -559,7 +558,6 @@ function RankTierReference() {
                   <TableCell className="text-muted-foreground">—</TableCell>
                   <TableCell><RankBadge value="4*" source="ajg" /></TableCell>
                   <TableCell className="text-muted-foreground">—</TableCell>
-                  <TableCell className="text-muted-foreground">Highest prestige</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
@@ -568,7 +566,6 @@ function RankTierReference() {
                   <TableCell><RankBadge value="A*" source="abdc" /></TableCell>
                   <TableCell><RankBadge value="4" source="ajg" /></TableCell>
                   <TableCell><RankBadge value="Q1" source="scimago" /></TableCell>
-                  <TableCell className="text-muted-foreground">Excellent</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
@@ -577,7 +574,6 @@ function RankTierReference() {
                   <TableCell><RankBadge value="A" source="abdc" /></TableCell>
                   <TableCell><RankBadge value="3" source="ajg" /></TableCell>
                   <TableCell><RankBadge value="Q2" source="scimago" /></TableCell>
-                  <TableCell className="text-muted-foreground">Very Good</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
@@ -586,7 +582,6 @@ function RankTierReference() {
                   <TableCell><RankBadge value="B" source="abdc" /></TableCell>
                   <TableCell><RankBadge value="2" source="ajg" /></TableCell>
                   <TableCell><RankBadge value="Q3" source="scimago" /></TableCell>
-                  <TableCell className="text-muted-foreground">Good</TableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>
@@ -595,7 +590,6 @@ function RankTierReference() {
                   <TableCell><RankBadge value="C" source="abdc" /></TableCell>
                   <TableCell><RankBadge value="1" source="ajg" /></TableCell>
                   <TableCell><RankBadge value="Q4" source="scimago" /></TableCell>
-                  <TableCell className="text-muted-foreground">Standard</TableCell>
                 </TableRow>
               </TableBody>
             </Table>
