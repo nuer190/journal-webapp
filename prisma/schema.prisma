@@ -229,9 +229,12 @@ model NEW_JOURNAL {
   issns               NEW_JOURNAL_ISSN[]
   area_mappings       NEW_JOURNAL_AREA_MAPPING[]
   rankings            NEW_JOURNAL_RANKING[]
+
+  @@index([journal_title])
+  @@index([publisher])
 }
 
-// 2. ตารางเก็บ ISSN (แยก Print / Online)
+// 2. แยก Print / Online
 model NEW_JOURNAL_ISSN {
   id                  Int         @id @default(autoincrement())
   journal_id          Int
@@ -240,9 +243,10 @@ model NEW_JOURNAL_ISSN {
   journal             NEW_JOURNAL @relation(fields: [journal_id], references: [id], onDelete: Cascade)
 
   @@unique([journal_id, issn])
+  @@index([issn])
 }
 
-// 3. ตาราง Subject Area (ระบุชัดเจนว่าสังกัด Source ไหน)
+// 3. ระบุชัดเจนว่าสังกัด Source ไหน
 model NEW_SUBJECT_AREA {
   id                  Int                        @id @default(autoincrement())
   source_id           Int
@@ -257,23 +261,27 @@ model NEW_SUBJECT_AREA {
   @@unique([source_id, area_name])
 }
 
-// 4. [จุดสำคัญที่สุด 🟢] ตาราง Mapping ระหว่าง Journal กับ Subject Area 
+// 4. Mapping ระหว่าง Journal กับ Subject Area 
 // ย้าย area_rank มาไว้นี่ เพื่อรองรับ Scimago ที่มี Rank แยกตาม Area!
 model NEW_JOURNAL_AREA_MAPPING {
   id                  Int              @id @default(autoincrement())
   journal_id          Int
   subject_area_id     Int
-  source_id           Int              // ระบุ Source ซ้ำเพื่อความรวดเร็วในการ Query Filter
-  area_rank           String?          // 🟢 เก็บ Rank เฉพาะ Area นี้ (เช่น Q1, Q2 ของ Scimago)
+  source_id           Int              
+  area_rank           String?          
 
   journal             NEW_JOURNAL      @relation(fields: [journal_id], references: [id], onDelete: Cascade)
   subject_area        NEW_SUBJECT_AREA @relation(fields: [subject_area_id], references: [id], onDelete: Cascade)
   source              NEW_SOURCE       @relation(fields: [source_id], references: [id], onDelete: Cascade)
 
   @@unique([journal_id, subject_area_id, source_id])
+  @@index([subject_area_id])
+  @@index([journal_id])
+  @@index([source_id])
+  @@index([source_id, subject_area_id])
 }
 
-// 5. ตาราง Ranking หลักของ Journal ประจำ Source
+// 5. Ranking หลักของ Journal ประจำ Source
 model NEW_JOURNAL_RANKING {
   id                  Int         @id @default(autoincrement())
   journal_id          Int
@@ -284,4 +292,6 @@ model NEW_JOURNAL_RANKING {
   source              NEW_SOURCE  @relation(fields: [source_id], references: [id], onDelete: Cascade)
 
   @@unique([journal_id, source_id])
+  @@index([source_id])
+  @@index([overall_rank])
 }
