@@ -12,10 +12,10 @@ import {
 } from "@/components/ui/sheet";
 
 const links = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/area-explorer", label: "Explore", icon: BookOpen },
-  { href: "/journal-search", label: "Search", icon: Search },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/", label: "Journal App", icon: LayoutDashboard },
+  { href: "/area-explorer", label: "Area Explorer", icon: BookOpen },
+  { href: "/journal-search", label: "Journal Search", icon: Search },
+  { href: "/analytics", label: "Analytics Dashboard", icon: BarChart3 },
   { href: "/journal-source", label: "Journal Source", icon: Database },
 ];
 
