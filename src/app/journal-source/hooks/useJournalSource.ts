@@ -45,7 +45,6 @@ export interface JournalAreaMapping {
 export interface NewJournalLog {
   id?: number;
   status?: string | null;
-  // เพิ่ม field อื่นๆ ของ NEW_JOURNAL ตามที่มีใน Schema ได้ครับ
 }
 
 export interface Journal {
@@ -54,7 +53,7 @@ export interface Journal {
   title?: string;
   publisher?: string | null;
   active_status?: string | null;
-  is_active?: boolean; // เพิ่ม field สำหรับ status
+  is_active?: boolean;
   source_type?: string | null;
   coverage?: string | null;
   year_inception?: string | null;
@@ -99,6 +98,10 @@ export function useJournalSource() {
   const [selectedSource, setSelectedSource] = useState<string>("");
   const [selectedAreas, setSelectedAreas] = useState<(string | number)[]>([]);
   const [selectedRanks, setSelectedRanks] = useState<string[]>([]);
+  
+  // 🟢 1. เพิ่ม State เก็บสถานะ Active / Inactive / All
+  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(10);
   const [pagination, setPagination] = useState<Pagination>({ totalCount: 0, page: 1, limit: 10, totalPages: 1 });
@@ -106,7 +109,6 @@ export function useJournalSource() {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // คำนวณ selectedSourceId เป็น number ให้พร้อมใช้งานทันที
   const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
 
   const fetchData = useCallback(async () => {
@@ -117,6 +119,12 @@ export function useJournalSource() {
       if (selectedSource) params.append("sourceId", selectedSource);
       selectedAreas.forEach((a) => params.append("areaId", String(a)));
       selectedRanks.forEach((r) => params.append("rank", r));
+      
+      // 🟢 2. เพิ่ม Parameter status ไปยัง Backend API (กรณีที่ไม่ใช่ "all")
+      if (selectedStatus && selectedStatus !== "all") {
+        params.append("status", selectedStatus);
+      }
+
       params.append("page", String(page));
       params.append("limit", String(limit));
 
@@ -141,7 +149,8 @@ export function useJournalSource() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSource, selectedAreas, selectedRanks, page, limit]);
+  // 🟢 3. เพิ่ม selectedStatus ใน Dependency Array
+  }, [selectedSource, selectedAreas, selectedRanks, selectedStatus, page, limit]);
 
   useEffect(() => {
     fetchData();
@@ -156,9 +165,10 @@ export function useJournalSource() {
     summary,
     isTop10,
     selectedSource,
-    selectedSourceId, //  ส่งคืน selectedSourceId (ที่เป็น number หรือ undefined) ออกไปให้ page.tsx ใช้
+    selectedSourceId,
     selectedAreas,
     selectedRanks,
+    selectedStatus, // 🟢 4.1 ส่งออก State
     page,
     pagination,
     loading,
@@ -166,6 +176,7 @@ export function useJournalSource() {
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
+    setSelectedStatus, // 🟢 4.2 ส่งออก Setter Function
     setPage,
     refetch: fetchData,
   };

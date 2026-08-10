@@ -9,12 +9,76 @@ export async function GET(request: NextRequest) {
   const majorGroup = searchParams.get("majorGroup");
   const source = searchParams.get("source");
   const rank = searchParams.get("rank");
+  const rawAreaRules = searchParams.get("areaRules"); // 1. เพิ่มการรับ areaRules
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "10");
 
   const where: Record<string, unknown> = {};
 
-  if (area) {
+  // 2. จัดการเงื่อนไข Area Rules (รองรับ AND / OR / NOT)
+  if (rawAreaRules) {
+    const andAreas: string[] = [];
+    const orAreas: string[] = [];
+    const notAreas: string[] = [];
+
+    rawAreaRules.split(",").forEach((item) => {
+      const [areaName, operator] = item.split(":");
+      const decodedArea = decodeURIComponent(areaName || "").trim();
+      if (decodedArea) {
+        if (operator === "AND") andAreas.push(decodedArea);
+        else if (operator === "NOT") notAreas.push(decodedArea);
+        else orAreas.push(decodedArea); // Default OR
+      }
+    });
+
+    const areaConditions: Record<string, unknown>[] = [];
+
+    // OR: วารสารต้องมีอย่างน้อย 1 Area ในกลุ่ม orAreas
+    if (orAreas.length > 0) {
+      areaConditions.push({
+        journalAreaDetails: {
+          some: {
+            area: {
+              area_name: { in: orAreas },
+            },
+          },
+        },
+      });
+    }
+
+    // AND: วารสารต้องมีครบ "ทุก Area" ในกลุ่ม andAreas
+    if (andAreas.length > 0) {
+      andAreas.forEach((a) => {
+        areaConditions.push({
+          journalAreaDetails: {
+            some: {
+              area: {
+                area_name: a,
+              },
+            },
+          },
+        });
+      });
+    }
+
+    // NOT: วารสารต้อง "ไม่มี" Area ใดๆ ในกลุ่ม notAreas
+    if (notAreas.length > 0) {
+      areaConditions.push({
+        journalAreaDetails: {
+          none: {
+            area: {
+              area_name: { in: notAreas },
+            },
+          },
+        },
+      });
+    }
+
+    if (areaConditions.length > 0) {
+      where.AND = areaConditions;
+    }
+  } else if (area) {
+    // 3. Fallback ใช้ Logic เดิมเมื่อไม่มี areaRules (ส่งมาแค่ area ตัวเดียว)
     where.journalAreaDetails = {
       some: {
         area: {
@@ -23,6 +87,8 @@ export async function GET(request: NextRequest) {
       },
     };
   }
+
+  // === ทุกอย่างด้านล่างนี้คงเดิม 100% ไม่กระทบ Logic อื่นๆ ===
 
   if (areaGroup) {
     where.journalAreaGroupDetails = {

@@ -12,6 +12,11 @@ export async function GET(req: NextRequest) {
     const selectedAreas = searchParams.getAll("areaId").filter(Boolean).map(Number);
     const selectedRanks = searchParams.getAll("rank").filter(Boolean);
 
+    // 🟢 1. ดึงสถานะ Active / Inactive จาก Query Parameter (รองรับ "status" หรือ "activeStatus")
+    const statusParam = (searchParams.get("status") || searchParams.get("activeStatus") || "")
+      .trim()
+      .toLowerCase();
+
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const skip = (page - 1) * limit;
@@ -45,6 +50,29 @@ export async function GET(req: NextRequest) {
             overall_rank: { in: selectedRanks },
           },
         },
+      });
+    }
+
+    // 🟢 2. เงื่อนไขการกรองคอลัมน์ active_status ตาม Schema
+    if (statusParam === "active") {
+      andConditions.push({
+        OR: [
+          { active_status: { equals: "Active", mode: "insensitive" } },
+          { active_status: { equals: "active", mode: "insensitive" } },
+          { active_status: { equals: "1" } },
+          { active_status: { equals: "true" } },
+          { active_status: null },
+          { active_status: "" },
+        ],
+      });
+    } else if (statusParam === "inactive") {
+      andConditions.push({
+        OR: [
+          { active_status: { equals: "Inactive", mode: "insensitive" } },
+          { active_status: { equals: "inactive", mode: "insensitive" } },
+          { active_status: { equals: "0" } },
+          { active_status: { equals: "false" } },
+        ],
       });
     }
 
@@ -163,7 +191,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 5. Formatting Journal Items (ส่งออก active_status และ Rank ของทุก Source อย่างถูกต้อง)
+    // 5. Formatting Journal Items
     const formattedJournals = rawJournals.map((j) => {
       const issnPrint =
         j.issns?.find((i) => i.issn_type?.toUpperCase().includes("PRINT"))?.issn ||
@@ -183,7 +211,7 @@ export async function GET(req: NextRequest) {
         rankValue: r.overall_rank,
       }));
 
-      // เช็ค active_status สำหรับ Scopus
+      // เช็ค active_status สำหรับ Scopus / General
       const activeStatus = j.active_status || "Active";
 
       return {

@@ -10,9 +10,11 @@ interface FilterPanelProps {
   selectedSource: string;
   selectedAreas: (string | number)[];
   selectedRanks: string[];
+  selectedStatus: string; // 👈 เพิ่ม
   onSourceChange: (sourceId: string) => void;
   onAreaChange: (areas: (string | number)[]) => void;
   onRankChange: (ranks: string[]) => void;
+  onStatusChange: (status: string) => void; // 👈 เพิ่ม
 }
 
 export function FilterPanel({
@@ -22,15 +24,22 @@ export function FilterPanel({
   selectedSource,
   selectedAreas = [],
   selectedRanks = [],
+  selectedStatus = "all", // 👈 เพิ่ม
   onSourceChange,
   onAreaChange,
   onRankChange,
+  onStatusChange, // 👈 เพิ่ม
 }: FilterPanelProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // ปิด Popover เมื่อคลิกด้านนอก
+  // ตรวจสอบว่า Source ที่เลือกปัจจุบันคือ Scopus หรือไม่
+  const isScopus = useMemo(() => {
+    const activeSource = sources.find((s) => String(s.id) === String(selectedSource));
+    return activeSource?.source_name.toLowerCase().includes("scopus") ?? false;
+  }, [sources, selectedSource]);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -67,7 +76,8 @@ export function FilterPanel({
 
   return (
     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+      {/* ปรับ Grid ให้เปลี่ยนเป็น 4 คอลัมน์เมื่อเลือก Scopus */}
+      <div className={`grid grid-cols-1 ${isScopus ? "md:grid-cols-4" : "md:grid-cols-3"} gap-6 items-start transition-all`}>
         
         {/* 1. SELECT SOURCE */}
         <div className="space-y-1.5">
@@ -80,6 +90,7 @@ export function FilterPanel({
               onSourceChange(e.target.value);
               onAreaChange([]);
               onRankChange([]);
+              onStatusChange("all"); // Reset Status เมื่อเปลี่ยน Source
               setSearchTerm("");
             }}
             className="w-full h-10 px-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer shadow-sm"
@@ -93,7 +104,36 @@ export function FilterPanel({
           </select>
         </div>
 
-        {/* 2. RANKS */}
+        {/* 2. SCOPUS STATUS FILTER (แสดงเฉพาะเมื่อเป็น Scopus) */}
+        {isScopus && (
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+              Scopus Status
+            </label>
+            <div className="flex gap-1 min-h-[40px] items-center p-1 border border-gray-200 rounded-xl bg-gray-50/50">
+              {[
+                { label: "All", value: "all" },
+                { label: "Active", value: "active" },
+                { label: "Inactive", value: "inactive" },
+              ].map((st) => (
+                <button
+                  key={st.value}
+                  type="button"
+                  onClick={() => onStatusChange(st.value)}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    selectedStatus === st.value
+                      ? "bg-blue-600 text-white shadow-sm"
+                      : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200/80"
+                  }`}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 3. RANKS */}
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             Ranks
@@ -123,7 +163,7 @@ export function FilterPanel({
           </div>
         </div>
 
-        {/* 3. SUBJECT AREAS (Popover Dropdown) */}
+        {/* 4. SUBJECT AREAS (Popover Dropdown) */}
         <div className="space-y-1.5 relative" ref={dropdownRef}>
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">

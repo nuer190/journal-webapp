@@ -21,6 +21,7 @@ export default function JournalSourcePage() {
     selectedSourceId,
     selectedAreas,
     selectedRanks,
+    selectedStatus, // 👈 เพิ่ม
     page,
     pagination,
     loading,
@@ -28,13 +29,12 @@ export default function JournalSourcePage() {
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
+    setSelectedStatus, // 👈 เพิ่ม
     setPage,
   } = useJournalSource();
 
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
 
-  // ⚡ ใช้ useCallback เพื่อให้ props `onSelectJournal` ไม่ถูกสร้างใหม่ทุกครั้งที่ Re-render
-  // ช่วยป้องกันไม่ให้ JournalTable (ที่ใช้ React.memo) Re-render โดยไม่จำเป็น
   const handleSelectJournal = useCallback((journal: Journal) => {
     setSelectedJournal(journal);
   }, []);
@@ -70,15 +70,17 @@ export default function JournalSourcePage() {
         selectedSource={selectedSource}
         selectedAreas={selectedAreas}
         selectedRanks={selectedRanks}
+        selectedStatus={selectedStatus} // 👈 เพิ่ม
         onSourceChange={setSelectedSource}
         onAreaChange={setSelectedAreas}
         onRankChange={setSelectedRanks}
+        onStatusChange={setSelectedStatus} // 👈 เพิ่ม
       />
 
       {/* Summary Stat Cards */}
       <SummaryCards summary={summary} loading={loading} />
 
-      {/* Chart Section - แสดงผลค้างไว้ตลอด ไม่ unmount แม้ตารางจะอยู่สถานะ loading */}
+      {/* Chart Section */}
       <ChartCard
         data={chartData}
         isTop10={isTop10}
@@ -134,6 +136,11 @@ export default function JournalSourcePage() {
         selectedSourceId={selectedSourceId}
         onClose={handleCloseModal}
       />
+      
+      {/* Timestamp Data Source */}
+      <div className="flex justify-end text-xs text-muted-foreground pt-1 pr-1 font-mono">
+        Data Source updated at 1 July 2026
+      </div>
     </div>
   );
 }
