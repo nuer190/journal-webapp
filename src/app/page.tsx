@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { motion, Variants } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin, Search, BarChart3, DatabaseZap, ArrowRight } from "lucide-react";
@@ -43,9 +42,8 @@ export default function HomePage() {
       color: "text-sky-600 dark:text-sky-400",
       bgColor: "bg-sky-500/15 dark:bg-sky-500/20",
       borderColor: "hover:border-sky-500/50",
-      image: "/previews/area-explorer.png",
-      // รูปสำรองกรณีที่ยังไม่ได้ใส่ไฟล์ใน public/previews/
-      fallbackImage: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1000&auto=format&fit=crop",
+      video: "/previews/area-explorer.mp4",
+      poster: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1000&auto=format&fit=crop",
     },
     {
       title: "Journal Search",
@@ -56,8 +54,8 @@ export default function HomePage() {
       color: "text-emerald-600 dark:text-emerald-400",
       bgColor: "bg-emerald-500/15 dark:bg-emerald-500/20",
       borderColor: "hover:border-emerald-500/50",
-      image: "/previews/journal-search.png",
-      fallbackImage: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000&auto=format&fit=crop",
+      video: "/previews/journal-search.mp4",
+      poster: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000&auto=format&fit=crop",
     },
     {
       title: "Analytics Dashboard",
@@ -68,8 +66,8 @@ export default function HomePage() {
       color: "text-amber-600 dark:text-amber-400",
       bgColor: "bg-amber-500/15 dark:bg-amber-500/20",
       borderColor: "hover:border-amber-500/50",
-      image: "/previews/analytics.png",
-      fallbackImage: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=1000&auto=format&fit=crop",
+      video: "/previews/analytics.mp4",
+      poster: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=1000&auto=format&fit=crop",
     },
     {
       title: "Journal Source Analytics",
@@ -80,12 +78,10 @@ export default function HomePage() {
       color: "text-rose-600 dark:text-rose-400",
       bgColor: "bg-rose-500/15 dark:bg-rose-500/20",
       borderColor: "hover:border-rose-500/50",
-      image: "/previews/journal-source.png",
-      fallbackImage: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=1000&auto=format&fit=crop",
+      video: "/previews/journal-source.mp4",
+      poster: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=1000&auto=format&fit=crop",
     },
   ];
-
-  const [imgSrc, setImgSrc] = useState<string | null>(null);
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)] overflow-hidden pb-16">
@@ -185,7 +181,7 @@ export default function HomePage() {
           </motion.div>
         </section>
 
-        {/* 3. System Showcase / Live Preview Section */}
+        {/* 3. System Showcase / Live Video Preview Section */}
         <section className="mt-8 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
           <div className="text-center max-w-2xl mx-auto">
             <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -204,10 +200,7 @@ export default function HomePage() {
               return (
                 <button
                   key={feature.title}
-                  onClick={() => {
-                    setActiveTab(idx);
-                    setImgSrc(null); // Reset fallback state เมื่อเปลี่ยน Tab
-                  }}
+                  onClick={() => setActiveTab(idx)}
                   className={cn(
                     "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer border",
                     isActive
@@ -222,7 +215,7 @@ export default function HomePage() {
             })}
           </div>
 
-          {/* Display Card Details & Image Showcase */}
+          {/* Display Card Details & Video Showcase */}
           <motion.div
             key={activeTab}
             initial={{ opacity: 0, y: 15 }}
@@ -268,20 +261,17 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Right: Showcase Image Preview */}
+            {/* Right: Showcase Video Preview */}
             <div className="lg:col-span-7 relative h-72 md:h-[400px] w-full overflow-hidden rounded-xl border border-border/60 bg-muted/40 shadow-inner group">
-              <Image
-                src={imgSrc || features[activeTab].image}
-                alt={features[activeTab].title}
-                fill
-                sizes="(max-width: 1024px) 100vw, 58vw"
-                priority
-                unoptimized
-                onError={() => {
-                  // หากหาไฟล์ใน public/previews ไม่พบ ให้สลับไปใช้รูปตัวอย่างทันที
-                  setImgSrc(features[activeTab].fallbackImage);
-                }}
-                className="object-cover object-top hover:scale-105 transition-transform duration-500"
+              <video
+                key={features[activeTab].video} // บังคับให้เปลี่ยนการเล่นวิดีโอทันทีเมื่อเปลี่ยน Tab
+                src={features[activeTab].video}
+                poster={features[activeTab].poster}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover object-top hover:scale-105 transition-transform duration-500"
               />
             </div>
           </motion.div>

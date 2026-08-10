@@ -20,7 +20,6 @@ const SOURCE_BADGE_STYLE: Record<string, { bg: string; text: string; border: str
   DEFAULT: { bg: "bg-gray-50", text: "text-gray-700", border: "border-gray-200" },
 };
 
-// 1. เปลี่ยนการประกาศฟังก์ชันจาก export function JournalTable เป็น JournalTableComponent
 function JournalTableComponent({
   journals = [],
   sources = [],
@@ -40,20 +39,17 @@ function JournalTableComponent({
   };
 
   const getScopusStatus = (journal: Journal) => {
-    // 1. ดึง status จาก new_journal (รองรับทั้งกรณีที่เป็น Object หรือ Array)
     const logObj = Array.isArray(journal.new_journal)
       ? journal.new_journal[0]
       : journal.new_journal;
 
     const logStatus = logObj?.status?.toLowerCase();
 
-    // 2. ถ้ามี status ใน NEW_JOURNAL Log ให้ใช้อันนี้ก่อน
     if (logStatus) {
       if (logStatus.includes("active")) return { label: "Active", isActive: true };
       if (logStatus.includes("inactive")) return { label: "Inactive", isActive: false };
     }
 
-    // 3. ถ้าไม่มี Log ให้ Fallback ไปเช็ค active_status จาก Scopus โดยตรง
     const statusText = (journal.active_status || "").trim().toLowerCase();
 
     const isActive =
@@ -91,6 +87,7 @@ function JournalTableComponent({
           <thead className="bg-gray-50/80 text-gray-500 uppercase tracking-wider font-semibold border-b border-gray-100">
             <tr>
               <th className="py-3.5 px-4">Journal Title</th>
+              <th className="py-3.5 px-4">Type</th>
               <th className="py-3.5 px-4">ISSN (Print / Online)</th>
               <th className="py-3.5 px-4">Publisher</th>
               <th className="py-3.5 px-4">Subject Areas</th>
@@ -108,7 +105,6 @@ function JournalTableComponent({
                 journal.issns?.find((i) => i.issn_type?.toUpperCase().match(/(ONLINE|EISSN)/))?.issn ||
                 "—";
 
-              // 1. Subject Areas Fallback
               const allMappings = journal.area_mappings || [];
               let displayAreas = allMappings;
 
@@ -123,7 +119,6 @@ function JournalTableComponent({
                 }
               }
 
-              // 2. Ranking Target
               let targetRanking = null;
               if (selectedSourceId) {
                 targetRanking = journal.rankings?.find(
@@ -133,11 +128,9 @@ function JournalTableComponent({
                 targetRanking = journal.rankings?.[0];
               }
 
-              // 3. Render Rank / Status Badge
               let rankDisplay: React.ReactNode = null;
 
               if (selectedSourceNameUpper.includes("SCOPUS")) {
-                //  ใช้งานสถานะจาก NEW_JOURNAL Log & active_status ของ Scopus
                 const { label, isActive } = getScopusStatus(journal);
 
                 rankDisplay = (
@@ -181,6 +174,8 @@ function JournalTableComponent({
                 rankDisplay = <span className="text-gray-400">—</span>;
               }
 
+              const sourceTypeDisplay = journal.source_type?.trim() || "Journal";
+
               return (
                 <tr
                   key={journal.id}
@@ -189,6 +184,11 @@ function JournalTableComponent({
                 >
                   <td className="py-3.5 px-4 font-semibold text-gray-900 max-w-xs truncate">
                     {journal.journal_title || journal.title}
+                  </td>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <span className="inline-block bg-slate-100 text-slate-700 border border-slate-200 font-medium px-2 py-0.5 rounded text-[11px]">
+                      {sourceTypeDisplay}
+                    </span>
                   </td>
                   <td className="py-3.5 px-4 whitespace-nowrap text-gray-500 font-mono text-[11px]">
                     <div>P: {printIssn}</div>
@@ -231,5 +231,4 @@ function JournalTableComponent({
   );
 }
 
-// 2. Export Component ด้วย React.memo
 export const JournalTable = React.memo(JournalTableComponent);
