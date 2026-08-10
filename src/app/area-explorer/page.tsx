@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, Suspense } from "react";
 import { useRouter } from "next/navigation";
 import { useJournalAreas } from "@/hooks/useJournalAreas";
 import { useAreaFilters, type AreaRule } from "@/app/area-explorer/hooks/useAreaFilters";
@@ -113,7 +113,7 @@ function RatingBadge({
   );
 }
 
-export default function AreaExplorer() {
+function AreaExplorerContent() {
   const router = useRouter();
 
   const {
@@ -172,9 +172,7 @@ export default function AreaExplorer() {
   const totalPages = journalAreasData?.totalPages ?? 1;
   const totalJournals = journalAreasData?.total ?? journals.length;
 
-  // คำนวณสรุปข้อมูลสถิติของรายการทั้งหมดที่กรองได้ (Filtered Data)
   const summaryStats = useMemo(() => {
-    // กรณีที่ Backend ส่งสรุปผลรวม (Aggregations) รายการทั้งหมดมาใน Response
     if (journalAreasData?.summary) {
       return {
         totalPublishers: journalAreasData.summary.totalPublishers ?? 0,
@@ -185,7 +183,6 @@ export default function AreaExplorer() {
       };
     }
 
-    // กรณีคำนวณจากชุดวารสารที่ดึงมา
     const publishersSet = new Set<string>();
     let abdcCount = 0;
     let ajgCount = 0;
@@ -530,7 +527,6 @@ export default function AreaExplorer() {
         </CardContent>
       </Card>
 
-      {/* Dynamic Summary Cards Section */}
       <div className="space-y-2">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-lg border border-border bg-card p-4 space-y-1">
@@ -586,11 +582,29 @@ export default function AreaExplorer() {
           </div>
         </div>
 
-        {/* Timestamp Data Source */}
         <div className="flex justify-end text-xs text-muted-foreground pt-1 pr-1 font-mono">
           Data Source updated at 1 July 2026
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AreaExplorer() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <Skeleton className="h-9 w-48" />
+            <Skeleton className="h-5 w-96" />
+          </div>
+          <Skeleton className="h-48 w-full rounded-lg" />
+          <Skeleton className="h-96 w-full rounded-lg" />
+        </div>
+      }
+    >
+      <AreaExplorerContent />
+    </Suspense>
   );
 }
