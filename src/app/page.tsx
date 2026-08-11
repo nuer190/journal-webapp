@@ -10,18 +10,20 @@ import { cn } from "@/lib/utils";
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState(0);
 
+  // Variant สำหรับ Grid Container
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.15,
+        staggerChildren: 0.12,
       },
     },
   };
 
+  // Variant สำหรับ Card แต่ละใบ (สไลด์ขึ้นเมื่อเลื่อนมาเจอ และสไลด์ลงเมื่อเลื่อนพ้น)
   const itemVariants: Variants = {
-    hidden: { y: 20, opacity: 0 },
+    hidden: { y: 40, opacity: 0 },
     visible: {
       y: 0,
       opacity: 1,
@@ -43,7 +45,7 @@ export default function HomePage() {
       bgColor: "bg-sky-500/15 dark:bg-sky-500/20",
       borderColor: "hover:border-sky-500/50",
       video: "/previews/area-explorer.mp4",
-      poster: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1000&auto=format&fit=crop",
+      poster: "/previews/area-explorer.png",
     },
     {
       title: "Journal Search",
@@ -55,7 +57,7 @@ export default function HomePage() {
       bgColor: "bg-emerald-500/15 dark:bg-emerald-500/20",
       borderColor: "hover:border-emerald-500/50",
       video: "/previews/journal-search.mp4",
-      poster: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1000&auto=format&fit=crop",
+      poster: "/previews/journal-search.png",
     },
     {
       title: "Analytics Dashboard",
@@ -67,19 +69,19 @@ export default function HomePage() {
       bgColor: "bg-amber-500/15 dark:bg-amber-500/20",
       borderColor: "hover:border-amber-500/50",
       video: "/previews/analytics.mp4",
-      poster: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=1000&auto=format&fit=crop",
+      poster: "/previews/analytics.png",
     },
     {
-      title: "Journal Source Analytics",
+      title: "Journal Source",
       description:
-        "Explore and compare journals across individual databases including ABDC, Scopus, Scimago, and AJG with area-specific breakdowns.",
+        "Examine real journal data across ABDC, Scopus, Scimago, and AJG to understand journal standings within each individual database.",
       icon: DatabaseZap,
       href: "/journal-source",
       color: "text-rose-600 dark:text-rose-400",
       bgColor: "bg-rose-500/15 dark:bg-rose-500/20",
       borderColor: "hover:border-rose-500/50",
       video: "/previews/journal-source.mp4",
-      poster: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=1000&auto=format&fit=crop",
+      poster: "/previews/journal-source.png",
     },
   ];
 
@@ -112,13 +114,14 @@ export default function HomePage() {
           </p>
         </motion.section>
 
-        {/* 2. Feature Cards Section */}
+        {/* 2. Feature Cards Section (Scroll In/Out) */}
         <section className="space-y-10 px-4 md:px-8 max-w-7xl mx-auto w-full">
           <motion.div
             className="mx-auto max-w-[620px] text-center"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: false, amount: 0.2 }} // once: false ช่วยให้เล่นซ้ำเมื่อเลื่อนเข้าออก
+            transition={{ duration: 0.5 }}
           >
             <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
               Key Features
@@ -133,7 +136,8 @@ export default function HomePage() {
             className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4"
             variants={containerVariants}
             initial="hidden"
-            animate="visible"
+            whileInView="visible"
+            viewport={{ once: false, amount: 0.15 }} // เลื่อนเข้า-ออกได้ตลอดเวลา
           >
             {features.map((feature) => {
               const Icon = feature.icon;
@@ -181,11 +185,17 @@ export default function HomePage() {
           </motion.div>
         </section>
 
-        {/* 3. System Showcase / Live Video Preview Section */}
-        <section className="mt-8 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8">
+        {/* 3. System Showcase / Live Video Preview Section (Scroll In/Out) */}
+        <motion.section 
+          className="mt-8 px-4 md:px-8 max-w-7xl mx-auto w-full space-y-8"
+          initial={{ opacity: 0, y: 50 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: false, amount: 0.2 }} // once: false ช่วยให้สไลด์เข้า-ออกทุกครั้งที่เลื่อนผ่าน
+          transition={{ duration: 0.6, ease: "easeOut" }}
+        >
           <div className="text-center max-w-2xl mx-auto">
             <h2 className="font-heading text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-              System Interface Preview
+              Feature Preview
             </h2>
             <p className="mt-3 text-lg text-muted-foreground leading-relaxed">
               Take a closer look at how each module works before diving in.
@@ -218,9 +228,9 @@ export default function HomePage() {
           {/* Display Card Details & Video Showcase */}
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4 }}
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
             className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-card/90 border border-border/80 rounded-2xl p-6 md:p-8 shadow-xl backdrop-blur-md"
           >
             {/* Left: Text & Info */}
@@ -264,7 +274,7 @@ export default function HomePage() {
             {/* Right: Showcase Video Preview */}
             <div className="lg:col-span-7 relative h-72 md:h-[400px] w-full overflow-hidden rounded-xl border border-border/60 bg-muted/40 shadow-inner group">
               <video
-                key={features[activeTab].video} // บังคับให้เปลี่ยนการเล่นวิดีโอทันทีเมื่อเปลี่ยน Tab
+                key={features[activeTab].video}
                 src={features[activeTab].video}
                 poster={features[activeTab].poster}
                 autoPlay
@@ -275,14 +285,14 @@ export default function HomePage() {
               />
             </div>
           </motion.div>
-        </section>
+        </motion.section>
       </div>
 
       {/* 4. Bottom Reference Note */}
       <div className="mx-auto max-w-7xl px-6 relative z-10">
         <div className="flex justify-end pt-10 border-t border-border/60 mt-10">
           <p className="text-xs text-muted-foreground/80 italic">
-            Data Source updated at 1 July 2026
+            Data Source updated at May 2026
           </p>
         </div>
       </div>

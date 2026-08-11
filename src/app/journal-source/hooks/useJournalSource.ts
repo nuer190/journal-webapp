@@ -64,7 +64,7 @@ export interface Journal {
   issnOnline?: string;
   topRank?: string;
   new_journal?: NewJournalLog | NewJournalLog[] | null;
-  rankQuality?: { sourceName: string; rankValue: string }[];
+  rankQuality?: { sourceId: number; sourceName: string; rankValue: string }[];
 }
 
 export interface ChartDataItem {
@@ -92,24 +92,58 @@ export function useJournalSource() {
   const [ranks, setRanks] = useState<string[]>([]);
   const [journals, setJournals] = useState<Journal[]>([]);
   const [chartData, setChartData] = useState<ChartDataItem[]>([]);
-  const [summary, setSummary] = useState<Summary>({ totalJournals: 0, totalPublishers: 0, totalAreas: 0 });
+  const [summary, setSummary] = useState<Summary>({
+    totalJournals: 0,
+    totalPublishers: 0,
+    totalAreas: 0,
+  });
   const [isTop10, setIsTop10] = useState<boolean>(true);
 
-  const [selectedSource, setSelectedSource] = useState<string>("");
-  const [selectedAreas, setSelectedAreas] = useState<(string | number)[]>([]);
-  const [selectedRanks, setSelectedRanks] = useState<string[]>([]);
-  
-  // 🟢 1. เพิ่ม State เก็บสถานะ Active / Inactive / All
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
+  const [selectedSource, setSelectedSourceState] = useState<string>("");
+  const [selectedAreas, setSelectedAreasState] = useState<(string | number)[]>([]);
+  const [selectedRanks, setSelectedRanksState] = useState<string[]>([]);
+  const [selectedStatus, setSelectedStatusState] = useState<string>("all");
 
   const [page, setPage] = useState<number>(1);
   const [limit] = useState<number>(10);
-  const [pagination, setPagination] = useState<Pagination>({ totalCount: 0, page: 1, limit: 10, totalPages: 1 });
+  const [pagination, setPagination] = useState<Pagination>({
+    totalCount: 0,
+    page: 1,
+    limit: 10,
+    totalPages: 1,
+  });
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
+
+  // 🟢 Wrapper สำหรับการเปลี่ยน Source แล้วล้าง Filter เก่า + Reset Page
+  const setSelectedSource = useCallback((sourceId: string) => {
+    setSelectedSourceState(sourceId);
+    setSelectedAreasState([]);
+    setSelectedRanksState([]);
+    setSelectedStatusState("all");
+    setPage(1);
+  }, []);
+
+  // 🟢 Wrapper สำหรับ Reset Page เมื่อเปลี่ยน Areas
+  const setSelectedAreas = useCallback((newAreas: (string | number)[]) => {
+    setSelectedAreasState(newAreas);
+    setPage(1);
+  }, []);
+
+  // 🟢 Wrapper สำหรับ Reset Page เมื่อเปลี่ยน Ranks
+  const setSelectedRanks = useCallback((newRanks: string[]) => {
+    setSelectedRanksState(newRanks);
+    setPage(1);
+  }, []);
+
+  // 🟢 Wrapper สำหรับ Reset Page เมื่อเปลี่ยน Status
+  const setSelectedStatus = useCallback((status: string) => {
+    setSelectedStatusState(status);
+    setPage(1);
+  }, []);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -119,8 +153,7 @@ export function useJournalSource() {
       if (selectedSource) params.append("sourceId", selectedSource);
       selectedAreas.forEach((a) => params.append("areaId", String(a)));
       selectedRanks.forEach((r) => params.append("rank", r));
-      
-      // 🟢 2. เพิ่ม Parameter status ไปยัง Backend API (กรณีที่ไม่ใช่ "all")
+
       if (selectedStatus && selectedStatus !== "all") {
         params.append("status", selectedStatus);
       }
@@ -149,7 +182,6 @@ export function useJournalSource() {
     } finally {
       setLoading(false);
     }
-  // 🟢 3. เพิ่ม selectedStatus ใน Dependency Array
   }, [selectedSource, selectedAreas, selectedRanks, selectedStatus, page, limit]);
 
   useEffect(() => {
@@ -168,7 +200,7 @@ export function useJournalSource() {
     selectedSourceId,
     selectedAreas,
     selectedRanks,
-    selectedStatus, // 🟢 4.1 ส่งออก State
+    selectedStatus,
     page,
     pagination,
     loading,
@@ -176,7 +208,7 @@ export function useJournalSource() {
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
-    setSelectedStatus, // 🟢 4.2 ส่งออก Setter Function
+    setSelectedStatus,
     setPage,
     refetch: fetchData,
   };

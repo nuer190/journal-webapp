@@ -235,7 +235,7 @@ function AreaExplorerContent() {
           Area Explorer
         </h1>
         <p className="mt-1 text-muted-foreground">
-          Browse journals by major group, area group, area logic (AND, OR, NOT), source, and rank.
+          Browse journals by major group, area group, source, and rank.
         </p>
       </div>
 
@@ -583,7 +583,7 @@ function AreaExplorerContent() {
         </div>
 
         <div className="flex justify-end text-xs text-muted-foreground pt-1 pr-1 font-mono">
-          Data Source updated at 1 July 2026
+          Data Source updated at May 2026
         </div>
       </div>
     </div>

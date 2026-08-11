@@ -201,7 +201,7 @@ export default function AnalyticsPage() {
       </Card>
       {/* Timestamp Data Source */}
         <div className="flex justify-end text-xs text-muted-foreground pt-1 pr-1 font-mono">
-          Data Source updated at 1 July 2026
+          Data Source updated at May 2026
         </div>
     </div>
   );

@@ -12,7 +12,6 @@ export async function GET(req: NextRequest) {
     const selectedAreas = searchParams.getAll("areaId").filter(Boolean).map(Number);
     const selectedRanks = searchParams.getAll("rank").filter(Boolean);
 
-    // 🟢 1. ดึงสถานะ Active / Inactive จาก Query Parameter (รองรับ "status" หรือ "activeStatus")
     const statusParam = (searchParams.get("status") || searchParams.get("activeStatus") || "")
       .trim()
       .toLowerCase();
@@ -53,7 +52,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // 🟢 2. เงื่อนไขการกรองคอลัมน์ active_status ตาม Schema
+    // Filter สถานะ Active / Inactive
     if (statusParam === "active") {
       andConditions.push({
         OR: [
@@ -79,24 +78,19 @@ export async function GET(req: NextRequest) {
     const journalWhereCondition: Prisma.NEW_JOURNALWhereInput =
       andConditions.length > 0 ? { AND: andConditions } : {};
 
-    // 2. Query ตัวเลือก Filter Areas ให้ยืดหยุ่นขึ้น
+    // 2. Query ตัวเลือก Subject Areas ตาม Source ที่เลือก
     let areasWhereCondition: Prisma.NEW_SUBJECT_AREAWhereInput | undefined = undefined;
 
     if (sourceId) {
       areasWhereCondition = {
         OR: [
+          // เงื่อนไขที่ 1: ตาราง Subject Area ผูกตรงกับ source_id นั้นๆ
           { source_id: sourceId },
+          // เงื่อนไขที่ 2: มี Journal Mapping ที่โยงกับ source_id นี้
           {
             journal_mappings: {
               some: {
-                OR: [
-                  { source_id: sourceId },
-                  {
-                    journal: {
-                      rankings: { some: { source_id: sourceId } },
-                    },
-                  },
-                ],
+                source_id: sourceId,
               },
             },
           },
@@ -104,7 +98,7 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // 3. Query ข้อมูลพร้อมกันผ่าน Promise.all
+    // 3. Executing Parallel Queries
     const [
       totalCount,
       allFilteredJournalsForPublishers,
@@ -131,10 +125,10 @@ export async function GET(req: NextRequest) {
       }),
       prisma.nEW_SOURCE.findMany({ orderBy: { source_name: "asc" } }),
 
+      // 🟢 ดึงเฉพาะ Areas ของ Source ที่เลือก
       prisma.nEW_SUBJECT_AREA.findMany({
         where: areasWhereCondition,
         orderBy: { area_name: "asc" },
-        distinct: ["area_name"],
       }),
 
       prisma.nEW_JOURNAL_RANKING.findMany({
@@ -211,7 +205,6 @@ export async function GET(req: NextRequest) {
         rankValue: r.overall_rank,
       }));
 
-      // เช็ค active_status สำหรับ Scopus / General
       const activeStatus = j.active_status || "Active";
 
       return {
@@ -230,7 +223,7 @@ export async function GET(req: NextRequest) {
       summary: {
         totalJournals: totalCount,
         totalPublishers: uniquePublishersCount,
-        totalAreas: chartSummaryRaw.length,
+        totalAreas: filteredAreasOptions.length,
       },
       isTop10: displayMode === "top10",
       displayLimit: finalChartSummary.length,
