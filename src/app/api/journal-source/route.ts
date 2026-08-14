@@ -272,6 +272,7 @@ export async function GET(req: NextRequest) {
         totalJournals: totalCount,
         totalPublishers: uniquePublishersCount,
         totalAreas: filteredAreasOptions.length,
+        totalSourceTypes: sourceTypesList.length,
       },
       isTop10: displayMode === "top10",
       displayLimit: finalChartSummary.length,

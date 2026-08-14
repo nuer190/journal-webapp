@@ -4,7 +4,8 @@ import React from "react";
 import { Summary } from "../hooks/useJournalSource";
 
 interface SummaryCardsProps {
-  summary: Summary;
+  // 🟢 รองรับ totalSourceTypes เพิ่มเติม
+  summary: Summary & { totalSourceTypes?: number };
   loading?: boolean;
 }
 
@@ -13,10 +14,13 @@ export function SummaryCards({ summary, loading }: SummaryCardsProps) {
     { title: "Total Journals", value: summary.totalJournals, color: "text-blue-600", bg: "bg-blue-50" },
     { title: "Publishers", value: summary.totalPublishers, color: "text-emerald-600", bg: "bg-emerald-50" },
     { title: "Subject Areas", value: summary.totalAreas, color: "text-purple-600", bg: "bg-purple-50" },
+    // 🟢 เพิ่มการ์ด Source Types
+    { title: "Source Types", value: summary.totalSourceTypes ?? 0, color: "text-amber-600", bg: "bg-amber-50" },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    // 🟢 ปรับ Responsive Grid รองรับ 4 การ์ด (sm: 2 คอลัมน์ / lg: 4 คอลัมน์)
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {cards.map((card, idx) => (
         <div
           key={idx}
@@ -25,7 +29,7 @@ export function SummaryCards({ summary, loading }: SummaryCardsProps) {
           <div>
             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">{card.title}</p>
             <h4 className={`text-2xl font-black mt-1 ${card.color}`}>
-              {loading ? "..." : card.value.toLocaleString()}
+              {loading ? "..." : (card.value ?? 0).toLocaleString()}
             </h4>
           </div>
           <div className={`w-10 h-10 rounded-xl ${card.bg} flex items-center justify-center font-bold ${card.color}`}>

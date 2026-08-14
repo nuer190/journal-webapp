@@ -77,6 +77,7 @@ export interface Summary {
   totalJournals: number;
   totalPublishers: number;
   totalAreas: number;
+  totalSourceTypes?: number; // 🟢 เพิ่ม Total Source Types
 }
 
 export interface Pagination {

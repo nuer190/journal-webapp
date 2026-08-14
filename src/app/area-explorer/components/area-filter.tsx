@@ -29,15 +29,15 @@ import type { AreaRule } from "../hooks/useAreaFilters";
 interface AreaFilterProps {
   filters: any;
   isLoading: boolean;
-  majorGroup: string | null;
+  majorGroup?: string | null;
   areaGroup: string | null;
   areaRules: AreaRule[];
-  source: string | null;
+  source?: string | null;
   rank: string | null;
-  onMajorGroupChange: (val: string | null) => void;
+  onMajorGroupChange?: (val: string | null) => void;
   onAreaGroupChange: (val: string | null) => void;
   onAreaRulesChange: (rules: AreaRule[]) => void;
-  onSourceChange: (val: string | null) => void;
+  onSourceChange?: (val: string | null) => void;
   onRankChange: (val: string | null) => void;
   onResetFilters: () => void;
 }
@@ -45,15 +45,11 @@ interface AreaFilterProps {
 export function AreaFilter({
   filters,
   isLoading,
-  majorGroup,
   areaGroup,
   areaRules,
-  source,
   rank,
-  onMajorGroupChange,
   onAreaGroupChange,
   onAreaRulesChange,
-  onSourceChange,
   onRankChange,
   onResetFilters,
 }: AreaFilterProps) {
@@ -80,29 +76,8 @@ export function AreaFilter({
 
   return (
     <div className="space-y-4 rounded-xl border bg-card p-4 shadow-sm">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Major Group Filter */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Major Group</label>
-          <Select 
-            value={majorGroup ?? "ALL"} 
-            onValueChange={(v) => onMajorGroupChange(v === "ALL" ? null : v)}
-            disabled={isLoading}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="All Major Groups" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Major Groups</SelectItem>
-              {filters?.majorGroups?.map((mg: string) => (
-                <SelectItem key={mg} value={mg}>
-                  {mg}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
+      {/* Top Filter Grid: แบ่ง 2 คอลัมน์เท่าๆ กัน (Area Group & Rank) */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* Area Group Filter */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Area Group</label>
@@ -124,7 +99,6 @@ export function AreaFilter({
             </SelectContent>
           </Select>
         </div>
-
 
         {/* Rank Filter */}
         <div className="space-y-1.5">
@@ -149,12 +123,12 @@ export function AreaFilter({
         </div>
       </div>
 
-      {/* Area Rules Section with Searchable Combobox */}
-      <div className="pt-2 border-t space-y-2">
+      {/* Area Rules Section */}
+      <div className="pt-3 border-t space-y-2">
         <label className="text-xs font-medium text-muted-foreground">
           Add Area Condition Rules (Searchable)
         </label>
-        <div className="flex flex-col sm:flex-row gap-2 items-center">
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
           {/* Operator Select */}
           <Select
             value={selectedOperator}
@@ -172,14 +146,14 @@ export function AreaFilter({
             </SelectContent>
           </Select>
 
-          {/* Searchable Area Combobox */}
+          {/* Searchable Area Combobox (ขยายเต็มพื้นที่ตรงกลาง) */}
           <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
             <PopoverTrigger
               role="combobox"
               aria-expanded={openCombobox}
               className={cn(
                 buttonVariants({ variant: "outline" }),
-                "w-full sm:w-[350px] shrink-0 justify-between font-normal"
+                "w-full sm:flex-1 justify-between font-normal"
               )}
             >
               <span className="truncate">
@@ -222,26 +196,27 @@ export function AreaFilter({
             </PopoverContent>
           </Popover>
 
-          {/* Add Rule Button */}
-          <Button
-            type="button"
-            onClick={handleAddRule}
-            disabled={!selectedArea}
-            className="gap-1 whitespace-nowrap shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            Add Rule
-          </Button>
+          {/* Action Buttons */}
+          <div className="flex gap-2 shrink-0">
+            <Button
+              type="button"
+              onClick={handleAddRule}
+              disabled={!selectedArea}
+              className="gap-1 whitespace-nowrap flex-1 sm:flex-none"
+            >
+              <Plus className="h-4 w-4" />
+              Add Rule
+            </Button>
 
-          {/* Clear / Reset Filters */}
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onResetFilters}
-            className="text-xs text-muted-foreground hover:text-foreground shrink-0"
-          >
-            Reset All
-          </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onResetFilters}
+              className="text-xs text-muted-foreground hover:text-foreground shrink-0"
+            >
+              Reset All
+            </Button>
+          </div>
         </div>
       </div>
     </div>
