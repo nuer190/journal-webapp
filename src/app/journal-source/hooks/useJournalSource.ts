@@ -90,6 +90,7 @@ export function useJournalSource() {
   const [sources, setSources] = useState<Source[]>([]);
   const [areas, setAreas] = useState<SubjectArea[]>([]);
   const [ranks, setRanks] = useState<string[]>([]);
+  const [sourceTypes, setSourceTypes] = useState<string[]>([]); // 🟢 เพิ่ม State เก็บรายการ Types
   const [journals, setJournals] = useState<Journal[]>([]);
   const [chartData, setChartData] = useState<ChartDataItem[]>([]);
   const [summary, setSummary] = useState<Summary>({
@@ -103,9 +104,10 @@ export function useJournalSource() {
   const [selectedAreas, setSelectedAreasState] = useState<(string | number)[]>([]);
   const [selectedRanks, setSelectedRanksState] = useState<string[]>([]);
   const [selectedStatus, setSelectedStatusState] = useState<string>("all");
+  const [selectedSourceType, setSelectedSourceTypeState] = useState<string>("all"); // 🟢 เพิ่ม State เก็บ Type ที่เลือก
 
   const [page, setPage] = useState<number>(1);
-  const [limit] = useState<number>(10);
+  const [limit, setLimitState] = useState<number>(10);
   const [pagination, setPagination] = useState<Pagination>({
     totalCount: 0,
     page: 1,
@@ -118,12 +120,19 @@ export function useJournalSource() {
 
   const selectedSourceId = selectedSource ? Number(selectedSource) : undefined;
 
-  // 🟢 Wrapper สำหรับการเปลี่ยน Source แล้วล้าง Filter เก่า + Reset Page
+  // 🟢 Wrapper สำหรับเปลี่ยน Limit และสั่ง Reset หน้ากลับไปเป็น 1
+  const setLimit = useCallback((newLimit: number) => {
+    setLimitState(newLimit);
+    setPage(1);
+  }, []);
+
+  // 🟢 Wrapper สำหรับการเปลี่ยน Source แล้วล้าง Filter เก่าทั้งหมด + Reset Page
   const setSelectedSource = useCallback((sourceId: string) => {
     setSelectedSourceState(sourceId);
     setSelectedAreasState([]);
     setSelectedRanksState([]);
     setSelectedStatusState("all");
+    setSelectedSourceTypeState("all"); // 🟢 Reset Source Type เมื่อเปลี่ยน Source
     setPage(1);
   }, []);
 
@@ -145,6 +154,12 @@ export function useJournalSource() {
     setPage(1);
   }, []);
 
+  // 🟢 Wrapper สำหรับ Reset Page เมื่อเปลี่ยน Source Type
+  const setSelectedSourceType = useCallback((sourceType: string) => {
+    setSelectedSourceTypeState(sourceType);
+    setPage(1);
+  }, []);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -158,6 +173,11 @@ export function useJournalSource() {
         params.append("status", selectedStatus);
       }
 
+      // 🟢 เพิ่ม Parameter สำหรับ Source Type Filter
+      if (selectedSourceType && selectedSourceType !== "all") {
+        params.append("sourceType", selectedSourceType);
+      }
+
       params.append("page", String(page));
       params.append("limit", String(limit));
 
@@ -169,11 +189,12 @@ export function useJournalSource() {
         setSources(data.sources || []);
         setAreas(data.areas || []);
         setRanks(data.ranks || []);
+        setSourceTypes(data.sourceTypes || []); // 🟢 อัปเดตรายการ Source Types จาก API
         setJournals(data.journals || []);
         setChartData(data.chartData || []);
         setSummary(data.summary || { totalJournals: 0, totalPublishers: 0, totalAreas: 0 });
         setIsTop10(data.isTop10 ?? true);
-        setPagination(data.pagination || { totalCount: 0, page: 1, limit: 10, totalPages: 1 });
+        setPagination(data.pagination || { totalCount: 0, page: 1, limit, totalPages: 1 });
       } else {
         throw new Error(data.error || "Failed to fetch data");
       }
@@ -182,7 +203,15 @@ export function useJournalSource() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSource, selectedAreas, selectedRanks, selectedStatus, page, limit]);
+  }, [
+    selectedSource,
+    selectedAreas,
+    selectedRanks,
+    selectedStatus,
+    selectedSourceType, // 🟢 เพิ่ม Dependency
+    page,
+    limit,
+  ]);
 
   useEffect(() => {
     fetchData();
@@ -192,6 +221,7 @@ export function useJournalSource() {
     sources,
     areas,
     ranks,
+    sourceTypes, // 🟢 ส่งออกตัวเลือก Source Types
     journals,
     chartData,
     summary,
@@ -201,7 +231,9 @@ export function useJournalSource() {
     selectedAreas,
     selectedRanks,
     selectedStatus,
+    selectedSourceType, // 🟢 ส่งออก State ที่ถูกเลือกอยู่
     page,
+    limit,
     pagination,
     loading,
     error,
@@ -209,7 +241,9 @@ export function useJournalSource() {
     setSelectedAreas,
     setSelectedRanks,
     setSelectedStatus,
+    setSelectedSourceType, // 🟢 ส่งออก Setter Function
     setPage,
+    setLimit,
     refetch: fetchData,
   };
 }

@@ -13,6 +13,7 @@ export default function JournalSourcePage() {
     sources,
     areas,
     ranks,
+    sourceTypes, // 🟢 ดึงรายการ Source Types
     journals,
     chartData,
     summary,
@@ -21,16 +22,20 @@ export default function JournalSourcePage() {
     selectedSourceId,
     selectedAreas,
     selectedRanks,
-    selectedStatus, // 👈 เพิ่ม
+    selectedStatus,
+    selectedSourceType, // 🟢 ดึงค่า Source Type ที่ถูกเลือก
     page,
+    limit = 10,
     pagination,
     loading,
     error,
     setSelectedSource,
     setSelectedAreas,
     setSelectedRanks,
-    setSelectedStatus, // 👈 เพิ่ม
+    setSelectedStatus,
+    setSelectedSourceType, // 🟢 ดึง Setter Function สำหรับเปลี่ยน Source Type
     setPage,
+    setLimit,
   } = useJournalSource();
 
   const [selectedJournal, setSelectedJournal] = useState<Journal | null>(null);
@@ -42,6 +47,15 @@ export default function JournalSourcePage() {
   const handleCloseModal = useCallback(() => {
     setSelectedJournal(null);
   }, []);
+
+  // Handler เมื่อมีการเปลี่ยน Rows per page
+  const handleLimitChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newLimit = Number(e.target.value);
+    if (setLimit) {
+      setLimit(newLimit);
+      setPage(1); // Reset กลับไปหน้า 1 เมื่อเปลี่ยนขนาดหน้า
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50/50 p-4 md:p-8 space-y-6 max-w-7xl mx-auto">
@@ -67,14 +81,17 @@ export default function JournalSourcePage() {
         sources={sources}
         areas={areas}
         ranks={ranks}
+        sourceTypes={sourceTypes} // 🟢 ส่งรายการ Source Types ไปยัง FilterPanel
         selectedSource={selectedSource}
         selectedAreas={selectedAreas}
         selectedRanks={selectedRanks}
-        selectedStatus={selectedStatus} // 👈 เพิ่ม
+        selectedStatus={selectedStatus}
+        selectedSourceType={selectedSourceType} // 🟢 ส่งค่าที่ถูกเลือก
         onSourceChange={setSelectedSource}
         onAreaChange={setSelectedAreas}
         onRankChange={setSelectedRanks}
-        onStatusChange={setSelectedStatus} // 👈 เพิ่ม
+        onStatusChange={setSelectedStatus}
+        onSourceTypeChange={setSelectedSourceType} // 🟢 ส่ง Handler สำหรับอัปเดต State
       />
 
       {/* Summary Stat Cards */}
@@ -90,11 +107,33 @@ export default function JournalSourcePage() {
 
       {/* Main Journal Table */}
       <div className="space-y-3">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
           <h3 className="text-base font-bold text-gray-900">Journal List</h3>
-          <span className="text-xs text-gray-400">
-            Showing Page {pagination.page} of {pagination.totalPages}
-          </span>
+          
+          <div className="flex items-center gap-4 text-xs text-gray-500">
+            {/* Rows Per Page Selector */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="rows-per-page" className="font-medium text-gray-600">
+                Rows per page:
+              </label>
+              <select
+                id="rows-per-page"
+                value={limit}
+                onChange={handleLimitChange}
+                disabled={loading}
+                className="bg-white border border-gray-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer disabled:opacity-50"
+              >
+                <option value={10}>10</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={500}>500</option>
+              </select>
+            </div>
+
+            <span>
+              Showing Page {pagination.page} of {pagination.totalPages}
+            </span>
+          </div>
         </div>
 
         <JournalTable
@@ -106,8 +145,15 @@ export default function JournalSourcePage() {
         />
 
         {/* Pagination Controls */}
-        {pagination.totalPages > 1 && (
-          <div className="flex justify-end items-center gap-2 pt-2">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-2 pt-2">
+          {/* ข้อมูลจำนวนทั้งหมด */}
+          <div className="text-xs text-gray-400">
+            {pagination.totalCount !== undefined && (
+              <span>Total {pagination.totalCount.toLocaleString()} items</span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
             <button
               disabled={page <= 1 || loading}
               onClick={() => setPage(page - 1)}
@@ -116,7 +162,7 @@ export default function JournalSourcePage() {
               Previous
             </button>
             <span className="text-xs font-bold text-gray-600 px-2">
-              {page} / {pagination.totalPages}
+              {page} / {pagination.totalPages || 1}
             </span>
             <button
               disabled={page >= pagination.totalPages || loading}
@@ -126,7 +172,7 @@ export default function JournalSourcePage() {
               Next
             </button>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Detail Modal */}

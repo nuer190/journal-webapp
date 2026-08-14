@@ -2,6 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 
+// ฟังก์ชันแปลงข้อความให้เป็น Title Case (เช่น "book series" -> "Book Series")
+function toTitleCase(str: string): string {
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -12,6 +20,12 @@ export async function GET(req: NextRequest) {
     const selectedAreas = searchParams.getAll("areaId").filter(Boolean).map(Number);
     const selectedRanks = searchParams.getAll("rank").filter(Boolean);
 
+    const sourceTypeParam = (
+      searchParams.get("sourceType") ||
+      searchParams.get("type") ||
+      ""
+    ).trim();
+
     const statusParam = (searchParams.get("status") || searchParams.get("activeStatus") || "")
       .trim()
       .toLowerCase();
@@ -20,7 +34,7 @@ export async function GET(req: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const skip = (page - 1) * limit;
 
-    // 1. Where Condition สำหรับการ Filter Journal
+    // 1. Where Condition
     const andConditions: Prisma.NEW_JOURNALWhereInput[] = [];
 
     if (sourceId) {
@@ -52,6 +66,16 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    // Filter Source Type (ใช้ mode: "insensitive" เพื่อให้ค้นหาเจอทั้งตัวเล็กและตัวใหญ่)
+    if (sourceTypeParam && sourceTypeParam.toLowerCase() !== "all") {
+      andConditions.push({
+        source_type: {
+          equals: sourceTypeParam,
+          mode: "insensitive",
+        },
+      });
+    }
+
     // Filter สถานะ Active / Inactive
     if (statusParam === "active") {
       andConditions.push({
@@ -78,15 +102,12 @@ export async function GET(req: NextRequest) {
     const journalWhereCondition: Prisma.NEW_JOURNALWhereInput =
       andConditions.length > 0 ? { AND: andConditions } : {};
 
-    // 2. Query ตัวเลือก Subject Areas ตาม Source ที่เลือก
     let areasWhereCondition: Prisma.NEW_SUBJECT_AREAWhereInput | undefined = undefined;
 
     if (sourceId) {
       areasWhereCondition = {
         OR: [
-          // เงื่อนไขที่ 1: ตาราง Subject Area ผูกตรงกับ source_id นั้นๆ
           { source_id: sourceId },
-          // เงื่อนไขที่ 2: มี Journal Mapping ที่โยงกับ source_id นี้
           {
             journal_mappings: {
               some: {
@@ -98,7 +119,7 @@ export async function GET(req: NextRequest) {
       };
     }
 
-    // 3. Executing Parallel Queries
+    // 2. Executing Parallel Queries
     const [
       totalCount,
       allFilteredJournalsForPublishers,
@@ -106,6 +127,7 @@ export async function GET(req: NextRequest) {
       sources,
       filteredAreasOptions,
       filteredRanksOptions,
+      filteredSourceTypesOptions,
     ] = await Promise.all([
       prisma.nEW_JOURNAL.count({ where: journalWhereCondition }),
       prisma.nEW_JOURNAL.findMany({
@@ -125,7 +147,6 @@ export async function GET(req: NextRequest) {
       }),
       prisma.nEW_SOURCE.findMany({ orderBy: { source_name: "asc" } }),
 
-      // 🟢 ดึงเฉพาะ Areas ของ Source ที่เลือก
       prisma.nEW_SUBJECT_AREA.findMany({
         where: areasWhereCondition,
         orderBy: { area_name: "asc" },
@@ -137,6 +158,23 @@ export async function GET(req: NextRequest) {
         select: { overall_rank: true },
         orderBy: { overall_rank: "asc" },
       }),
+
+      prisma.nEW_JOURNAL.findMany({
+        where: {
+          source_type: { not: null },
+          ...(sourceId
+            ? {
+                OR: [
+                  { area_mappings: { some: { source_id: sourceId } } },
+                  { rankings: { some: { source_id: sourceId } } },
+                ],
+              }
+            : {}),
+        },
+        distinct: ["source_type"],
+        select: { source_type: true },
+        orderBy: { source_type: "asc" },
+      }),
     ]);
 
     const uniquePublishersCount = new Set(
@@ -145,7 +183,7 @@ export async function GET(req: NextRequest) {
         .filter((p): p is string => Boolean(p && p.trim() !== ""))
     ).size;
 
-    // 4. คำนวณ Chart Data
+    // Chart Data Summary
     const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
 
     const chartSummaryRaw = await prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
@@ -185,7 +223,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 5. Formatting Journal Items
+    // Formatting Journal Items
     const formattedJournals = rawJournals.map((j) => {
       const issnPrint =
         j.issns?.find((i) => i.issn_type?.toUpperCase().includes("PRINT"))?.issn ||
@@ -210,6 +248,7 @@ export async function GET(req: NextRequest) {
       return {
         ...j,
         title: j.journal_title,
+        source_type: j.source_type ? toTitleCase(j.source_type) : "—",
         issn: issnPrint,
         issnOnline: issnOnline,
         active_status: activeStatus,
@@ -217,6 +256,15 @@ export async function GET(req: NextRequest) {
         topRank: currentRanks[0]?.overall_rank || "—",
       };
     });
+
+    // 🟢 รวมค่า ปรับเป็น Title Case และตัดค่าซ้ำ (Deduplicate)
+    const rawSourceTypes = filteredSourceTypesOptions
+      .map((item) => item.source_type)
+      .filter((type): type is string => Boolean(type && type.trim() !== ""));
+
+    const sourceTypesList = Array.from(
+      new Set(rawSourceTypes.map((type) => toTitleCase(type)))
+    ).sort();
 
     return NextResponse.json({
       success: true,
@@ -230,6 +278,7 @@ export async function GET(req: NextRequest) {
       sources,
       areas: filteredAreasOptions,
       ranks: filteredRanksOptions.map((r) => r.overall_rank).filter(Boolean),
+      sourceTypes: sourceTypesList, // 🟢 ได้เฉพาะ ["Book Series", "Journal", "Trade Journal"]
       journals: formattedJournals,
       chartData,
       pagination: {

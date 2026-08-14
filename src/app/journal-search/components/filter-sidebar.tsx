@@ -20,8 +20,9 @@ interface FilterSidebarProps {
 function FilterCategory({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1">
-      <div className="px-0 pt-3 pb-1">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      {/* ปรับให้หัวข้อใหญ่ขึ้น (text-sm), หนาขึ้น (font-bold), สีเข้มชัดเจน (text-foreground) และเพิ่มระยะเว้นบรรทัด */}
+      <div className="px-0 pt-4 pb-1.5 border-b border-border/40 mb-2">
+        <span className="text-sm font-bold uppercase tracking-wider text-foreground">
           {label}
         </span>
       </div>
@@ -39,11 +40,11 @@ export function FilterSidebar({
 }: FilterSidebarProps) {
   return (
     <Card className="flex h-full flex-col overflow-hidden">
-      <CardHeader className="shrink-0">
-        <CardTitle>Filters</CardTitle>
+      <CardHeader className="shrink-0 border-b pb-3">
+        <CardTitle className="text-xl font-bold tracking-tight">Filters</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 overflow-y-auto p-0">
-        <div className="space-y-1 px-4">
+        <div className="space-y-4 px-4 py-2">
           <FilterCategory label="Metadata">
             <FilterSection
               title="Database Source"
@@ -226,27 +227,11 @@ export function FilterSidebar({
                 placeholder="Select Scopus area..."
               />
             </FilterSection>
-
-            <FilterSection
-              title="Scopus Area Group"
-              count={filters.scopusAreaGroupId ? 1 : 0}
-              open={!!filters.scopusAreaGroupId}
-            >
-              <FilterSearchableId
-                label=""
-                options={options.scopusAreaGroups}
-                value={filters.scopusAreaGroupId}
-                onChange={(scopusAreaGroupId) =>
-                  onFilterChange({ scopusAreaGroupId })
-                }
-                placeholder="Select Scopus area group..."
-              />
-            </FilterSection>
           </FilterCategory>
         </div>
       </CardContent>
       {activeFilterCount > 0 && (
-        <CardFooter className="shrink-0">
+        <CardFooter className="shrink-0 border-t p-3">
           <Button variant="outline" onClick={onReset} className="w-full">
             Reset Filters
           </Button>

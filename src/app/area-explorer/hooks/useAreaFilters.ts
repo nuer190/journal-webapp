@@ -30,15 +30,37 @@ export interface JournalQueryParams {
   orAreas?: string;
   notAreas?: string;
   areas?: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface JournalAreasResponse {
-  journals: any[];
+  journals: unknown[];
   total: number;
   totalPages: number;
   page: number;
   limit: number;
+}
+
+/**
+ * Helper สำหรับสร้าง URLSearchParams จาก Object ให้สอดคล้องกัน
+ */
+function buildSearchParams(params?: Record<string, unknown>): URLSearchParams {
+  const query = new URLSearchParams();
+  if (!params) return query;
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      if (Array.isArray(value)) {
+        value.forEach((v) => {
+          if (v) query.append(key, String(v));
+        });
+      } else {
+        query.set(key, String(value));
+      }
+    }
+  });
+
+  return query;
 }
 
 /**
@@ -50,68 +72,50 @@ export function useJournalAreas(params?: JournalQueryParams) {
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
 
-  // แปลง Params เป็น String เพื่อใช้ตรวจจับการเปลี่ยนแปลงอย่างแม่นยำใน useEffect
   const serializedParams = useMemo(() => {
-    if (!params) return "";
-    return JSON.stringify(params);
+    return params ? JSON.stringify(params) : "";
   }, [params]);
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
     setIsFetching(true);
 
     const fetchJournals = async () => {
       try {
-        const query = new URLSearchParams();
+        const query = buildSearchParams(params);
+        const res = await fetch(`/api/journals/journal-areas?${query.toString()}`, {
+          signal: controller.signal,
+        });
 
-        if (params) {
-          Object.entries(params).forEach(([key, value]) => {
-            if (value !== undefined && value !== null && value !== "") {
-              if (Array.isArray(value)) {
-                value.forEach((v) => {
-                  if (v) query.append(key, String(v));
-                });
-              } else {
-                query.set(key, String(value));
-              }
-            }
-          });
-        }
-
-        const res = await fetch(`/api/journals/journal-areas?${query.toString()}`);
         const contentType = res.headers.get("content-type");
-
         if (!res.ok || !contentType?.includes("application/json")) {
-          throw new Error(`API returned ${res.status}`);
+          throw new Error(`API returned status ${res.status}`);
         }
 
         const rawResult = await res.json();
+        const payload = rawResult?.data || rawResult?.payload || rawResult || {};
 
-        if (isMounted) {
-          const payload = rawResult?.data || rawResult?.payload || rawResult || {};
+        const formattedData: JournalAreasResponse = {
+          journals: Array.isArray(payload.journals)
+            ? payload.journals
+            : Array.isArray(payload)
+            ? payload
+            : [],
+          total: Number(payload.total ?? payload.count ?? 0),
+          totalPages: Number(payload.totalPages ?? payload.total_pages ?? 1),
+          page: Number(payload.page ?? params?.page ?? 1),
+          limit: Number(payload.limit ?? params?.limit ?? 10),
+        };
 
-          const formattedData: JournalAreasResponse = {
-            journals: Array.isArray(payload.journals)
-              ? payload.journals
-              : Array.isArray(payload)
-              ? payload
-              : [],
-            total: Number(payload.total ?? payload.count ?? 0),
-            totalPages: Number(payload.totalPages ?? payload.total_pages ?? 1),
-            page: Number(payload.page ?? params?.page ?? 1),
-            limit: Number(payload.limit ?? params?.limit ?? 10),
-          };
-
-          setData(formattedData);
-          setError(null);
-        }
-      } catch (err: any) {
-        if (isMounted) {
+        setData(formattedData);
+        setError(null);
+      } catch (err: unknown) {
+        if ((err as Error).name !== "AbortError") {
           console.error("Journal Fetch Error:", err);
-          setError(err);
+          setError(err instanceof Error ? err : new Error("An error occurred"));
         }
       } finally {
-        if (isMounted) {
+        if (!controller.signal.aborted) {
           setIsLoading(false);
           setIsFetching(false);
         }
@@ -121,7 +125,7 @@ export function useJournalAreas(params?: JournalQueryParams) {
     fetchJournals();
 
     return () => {
-      isMounted = false;
+      controller.abort();
     };
   }, [serializedParams]);
 
@@ -145,12 +149,12 @@ export function useAreaFilters(params?: { majorGroup?: string; areaGroup?: strin
   const areaGroup = searchParams.get("areaGroup");
   const source = searchParams.get("source");
   const rank = searchParams.get("rank");
+  const rawAreaRules = searchParams.get("areaRules") || "";
 
   const areaRules = useMemo<AreaRule[]>(() => {
-    const raw = searchParams.get("areaRules");
-    if (!raw) return [];
+    if (!rawAreaRules) return [];
 
-    return raw
+    return rawAreaRules
       .split(",")
       .map((item) => {
         const [area, operator] = item.split(":");
@@ -160,7 +164,7 @@ export function useAreaFilters(params?: { majorGroup?: string; areaGroup?: strin
         };
       })
       .filter((r) => r.area !== "");
-  }, [searchParams]);
+  }, [rawAreaRules]);
 
   const [data, setData] = useState<AreaFilterOptions | undefined>(undefined);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -168,12 +172,14 @@ export function useAreaFilters(params?: { majorGroup?: string; areaGroup?: strin
 
   const activeMajorGroup = params?.majorGroup ?? majorGroup ?? "";
   const activeAreaGroup = params?.areaGroup ?? areaGroup ?? "";
-  const activeAreas = useMemo(() => params?.areas ?? areaRules.map((r) => r.area), [params?.areas, areaRules]);
 
-  const rawAreaRules = searchParams.get("areaRules") || "";
+  const activeAreasSerialized = useMemo(() => {
+    const areas = params?.areas ?? areaRules.map((r) => r.area);
+    return JSON.stringify(areas);
+  }, [params?.areas, areaRules]);
 
   useEffect(() => {
-    let isMounted = true;
+    const controller = new AbortController();
     setIsLoading(true);
 
     const fetchFilterOptions = async () => {
@@ -181,65 +187,75 @@ export function useAreaFilters(params?: { majorGroup?: string; areaGroup?: strin
         const query = new URLSearchParams();
         if (activeMajorGroup) query.set("majorGroup", activeMajorGroup);
         if (activeAreaGroup) query.set("areaGroup", activeAreaGroup);
+        if (source) query.set("source", source);
+        if (rank) query.set("rank", rank);
 
         if (rawAreaRules) {
           query.set("areaRules", rawAreaRules);
         } else {
-          activeAreas.forEach((a) => {
+          const parsedAreas: string[] = JSON.parse(activeAreasSerialized);
+          parsedAreas.forEach((a) => {
             if (a) query.append("areas", a);
           });
         }
 
-        const res = await fetch(`/api/filters/area-explorer?${query.toString()}`);
-        const contentType = res.headers.get("content-type");
+        const res = await fetch(`/api/filters/area-explorer?${query.toString()}`, {
+          signal: controller.signal,
+        });
 
+        const contentType = res.headers.get("content-type");
         if (!res.ok || !contentType?.includes("application/json")) {
-          throw new Error(`API returned ${res.status}`);
+          throw new Error(`API returned status ${res.status}`);
         }
 
         const rawResult = await res.json();
+        const payload = rawResult?.data || rawResult?.payload || rawResult || {};
 
-        if (isMounted) {
-          const payload = rawResult?.data || rawResult?.payload || rawResult || {};
+        const formattedData: AreaFilterOptions = {
+          majorGroups: Array.isArray(payload.majorGroups)
+            ? payload.majorGroups
+            : Array.isArray(payload.major_groups)
+            ? payload.major_groups
+            : [],
+          areaGroups: Array.isArray(payload.areaGroups)
+            ? payload.areaGroups
+            : Array.isArray(payload.area_groups)
+            ? payload.area_groups
+            : [],
+          areas: Array.isArray(payload.areas) ? payload.areas : [],
+          sources: Array.isArray(payload.sources) ? payload.sources : [],
+          ranks: Array.isArray(payload.ranks) ? payload.ranks : [],
+        };
 
-          const formattedData: AreaFilterOptions = {
-            majorGroups: Array.isArray(payload.majorGroups)
-              ? payload.majorGroups
-              : Array.isArray(payload.major_groups)
-              ? payload.major_groups
-              : [],
-            areaGroups: Array.isArray(payload.areaGroups)
-              ? payload.areaGroups
-              : Array.isArray(payload.area_groups)
-              ? payload.area_groups
-              : [],
-            areas: Array.isArray(payload.areas) ? payload.areas : [],
-            sources: Array.isArray(payload.sources) ? payload.sources : [],
-            ranks: Array.isArray(payload.ranks) ? payload.ranks : [],
-          };
-
-          setData(formattedData);
-          setError(null);
-        }
-      } catch (err: any) {
-        if (isMounted) {
+        setData(formattedData);
+        setError(null);
+      } catch (err: unknown) {
+        if ((err as Error).name !== "AbortError") {
           console.error("Filter Fetch Error:", err);
-          setError(err);
+          setError(err instanceof Error ? err : new Error("An error occurred"));
         }
       } finally {
-        if (isMounted) setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchFilterOptions();
+
     return () => {
-      isMounted = false;
+      controller.abort();
     };
-  }, [activeMajorGroup, activeAreaGroup, rawAreaRules, JSON.stringify(activeAreas)]);
+  }, [activeMajorGroup, activeAreaGroup, rawAreaRules, activeAreasSerialized, source, rank]);
 
   const updateQueryParams = useCallback(
     (updates: Record<string, string | null>) => {
       const newParams = new URLSearchParams(searchParams.toString());
+
+      // Auto Reset หน้าเป็น page=1 เมื่อมีการเปลี่ยน Filter
+      if (newParams.has("page") && !("page" in updates)) {
+        newParams.set("page", "1");
+      }
 
       Object.entries(updates).forEach(([key, value]) => {
         if (value === null || value === "") {

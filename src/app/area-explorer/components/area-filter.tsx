@@ -84,7 +84,11 @@ export function AreaFilter({
         {/* Major Group Filter */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Major Group</label>
-          <Select value={majorGroup ?? "ALL"} onValueChange={(v) => onMajorGroupChange(v === "ALL" ? null : v)}>
+          <Select 
+            value={majorGroup ?? "ALL"} 
+            onValueChange={(v) => onMajorGroupChange(v === "ALL" ? null : v)}
+            disabled={isLoading}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="All Major Groups" />
             </SelectTrigger>
@@ -102,7 +106,11 @@ export function AreaFilter({
         {/* Area Group Filter */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Area Group</label>
-          <Select value={areaGroup ?? "ALL"} onValueChange={(v) => onAreaGroupChange(v === "ALL" ? null : v)}>
+          <Select 
+            value={areaGroup ?? "ALL"} 
+            onValueChange={(v) => onAreaGroupChange(v === "ALL" ? null : v)}
+            disabled={isLoading}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="All Area Groups" />
             </SelectTrigger>
@@ -117,28 +125,15 @@ export function AreaFilter({
           </Select>
         </div>
 
-        {/* Source Filter */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Source</label>
-          <Select value={source ?? "ALL"} onValueChange={(v) => onSourceChange(v === "ALL" ? null : v)}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="All Sources" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Sources</SelectItem>
-              {filters?.sources?.map((s: string) => (
-                <SelectItem key={s} value={s}>
-                  {s.toUpperCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
 
         {/* Rank Filter */}
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Rank</label>
-          <Select value={rank ?? "ALL"} onValueChange={(v) => onRankChange(v === "ALL" ? null : v)}>
+          <Select 
+            value={rank ?? "ALL"} 
+            onValueChange={(v) => onRankChange(v === "ALL" ? null : v)}
+            disabled={isLoading}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="All Ranks" />
             </SelectTrigger>
@@ -164,7 +159,7 @@ export function AreaFilter({
           <Select
             value={selectedOperator}
             onValueChange={(val) => {
-              if (val) setSelectedOperator(val);
+              if (val) setSelectedOperator(val as "AND" | "OR" | "NOT");
             }}
           >
             <SelectTrigger className="w-full sm:w-[110px] shrink-0">
@@ -180,12 +175,12 @@ export function AreaFilter({
           {/* Searchable Area Combobox */}
           <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
             <PopoverTrigger
+              role="combobox"
+              aria-expanded={openCombobox}
               className={cn(
                 buttonVariants({ variant: "outline" }),
                 "w-full sm:w-[350px] shrink-0 justify-between font-normal"
               )}
-              role="combobox"
-              aria-expanded={openCombobox}
             >
               <span className="truncate">
                 {selectedArea
@@ -207,8 +202,8 @@ export function AreaFilter({
                       <CommandItem
                         key={area}
                         value={area}
-                        onSelect={(currentValue) => {
-                          setSelectedArea(currentValue === selectedArea ? "" : area);
+                        onSelect={() => {
+                          setSelectedArea(area === selectedArea ? "" : area);
                           setOpenCombobox(false);
                         }}
                       >

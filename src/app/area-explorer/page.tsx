@@ -215,6 +215,13 @@ function AreaExplorerContent() {
     }
   }, []);
 
+  // Handler เพิ่มเติมสำหรับการเปลี่ยน Source อย่างถูกต้อง
+  const handleSourceChange = useCallback((val: string | null) => {
+    setSource(val);
+    setRank(null); // ล้าง Rank เดิมทิ้งเนื่องจากแต่ Source มีโครงสร้าง Rank ต่างกัน
+    setCurrentPage(1);
+  }, [setSource, setRank]);
+
   const visiblePages = useMemo(() => {
     if (totalPages <= 1) return [];
     const delta = 1;
@@ -250,7 +257,7 @@ function AreaExplorerContent() {
         onMajorGroupChange={(val) => { setMajorGroup(val); setCurrentPage(1); }}
         onAreaGroupChange={(val) => { setAreaGroup(val); setCurrentPage(1); }}
         onAreaRulesChange={(rules) => { setAreaRules(rules); setCurrentPage(1); }}
-        onSourceChange={(val) => { setSource(val); setCurrentPage(1); }}
+        onSourceChange={handleSourceChange}
         onRankChange={(val) => { setRank(val); setCurrentPage(1); }}
         onResetFilters={() => { resetFilters(); setCurrentPage(1); }}
       />
@@ -316,7 +323,7 @@ function AreaExplorerContent() {
               Source: {source}
               <button
                 type="button"
-                onClick={() => setSource(null)}
+                onClick={() => handleSourceChange(null)}
                 className="rounded-full p-0.5 hover:bg-muted-foreground/20"
               >
                 <X className="h-3 w-3" />

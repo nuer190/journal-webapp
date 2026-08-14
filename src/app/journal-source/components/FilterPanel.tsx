@@ -7,28 +7,34 @@ interface FilterPanelProps {
   sources: Source[];
   areas: SubjectArea[];
   ranks: string[];
+  sourceTypes?: string[]; // 🟢 เพิ่ม Prop รายการ Source Types
   selectedSource: string;
   selectedAreas: (string | number)[];
   selectedRanks: string[];
-  selectedStatus: string; // 👈 เพิ่ม
+  selectedStatus: string;
+  selectedSourceType?: string; // 🟢 เพิ่ม Prop ค่า Source Type ที่เลือก
   onSourceChange: (sourceId: string) => void;
   onAreaChange: (areas: (string | number)[]) => void;
   onRankChange: (ranks: string[]) => void;
-  onStatusChange: (status: string) => void; // 👈 เพิ่ม
+  onStatusChange: (status: string) => void;
+  onSourceTypeChange?: (sourceType: string) => void; // 🟢 เพิ่ม Callback เมื่อเปลี่ยน Source Type
 }
 
 export function FilterPanel({
   sources = [],
   areas = [],
   ranks = [],
+  sourceTypes = [], // 🟢 ค่าเริ่มต้นเป็น Array ว่าง
   selectedSource,
   selectedAreas = [],
   selectedRanks = [],
-  selectedStatus = "all", // 👈 เพิ่ม
+  selectedStatus = "all",
+  selectedSourceType = "all", // 🟢 ค่าเริ่มต้นเป็น "all"
   onSourceChange,
   onAreaChange,
   onRankChange,
-  onStatusChange, // 👈 เพิ่ม
+  onStatusChange,
+  onSourceTypeChange, // 🟢 Callback function
 }: FilterPanelProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -76,9 +82,12 @@ export function FilterPanel({
 
   return (
     <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 space-y-4">
-      {/* ปรับ Grid ให้เปลี่ยนเป็น 4 คอลัมน์เมื่อเลือก Scopus */}
-      <div className={`grid grid-cols-1 ${isScopus ? "md:grid-cols-4" : "md:grid-cols-3"} gap-6 items-start transition-all`}>
-        
+      {/* 🟢 ปรับ Grid Layout แบบ Responsive ให้รองรับการเพิ่ม Source Type และ Scopus Status */}
+      <div
+        className={`grid grid-cols-1 md:grid-cols-2 ${
+          isScopus ? "lg:grid-cols-5" : "lg:grid-cols-4"
+        } gap-4 items-start transition-all`}
+      >
         {/* 1. SELECT SOURCE */}
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -90,7 +99,8 @@ export function FilterPanel({
               onSourceChange(e.target.value);
               onAreaChange([]);
               onRankChange([]);
-              onStatusChange("all"); // Reset Status เมื่อเปลี่ยน Source
+              onStatusChange("all");
+              if (onSourceTypeChange) onSourceTypeChange("all"); // 🟢 Reset Source Type เมื่อเปลี่ยน Source
               setSearchTerm("");
             }}
             className="w-full h-10 px-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer shadow-sm"
@@ -104,7 +114,27 @@ export function FilterPanel({
           </select>
         </div>
 
-        {/* 2. SCOPUS STATUS FILTER (แสดงเฉพาะเมื่อเป็น Scopus) */}
+        {/* 🟢 2. SOURCE TYPE FILTER */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
+            Source Type
+          </label>
+          <select
+            value={selectedSourceType}
+            disabled={!selectedSource || sourceTypes.length === 0}
+            onChange={(e) => onSourceTypeChange && onSourceTypeChange(e.target.value)}
+            className="w-full h-10 px-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed transition-all cursor-pointer shadow-sm"
+          >
+            <option value="all">All Types</option>
+            {sourceTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 3. SCOPUS STATUS FILTER (แสดงเฉพาะเมื่อเป็น Scopus) */}
         {isScopus && (
           <div className="space-y-1.5">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
@@ -133,7 +163,7 @@ export function FilterPanel({
           </div>
         )}
 
-        {/* 3. RANKS */}
+        {/* 4. RANKS */}
         <div className="space-y-1.5">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">
             Ranks
@@ -163,7 +193,7 @@ export function FilterPanel({
           </div>
         </div>
 
-        {/* 4. SUBJECT AREAS (Popover Dropdown) */}
+        {/* 5. SUBJECT AREAS (Popover Dropdown) */}
         <div className="space-y-1.5 relative" ref={dropdownRef}>
           <div className="flex justify-between items-center">
             <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">

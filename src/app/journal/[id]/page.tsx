@@ -754,7 +754,7 @@ export default function JournalDetailPage() {
                     ))}
                   </TableRow>
                   <TableRow>
-                    <TableCell className="font-medium">Active Status</TableCell>
+                    <TableCell className="font-medium">Scopus Active Status</TableCell>
                     {visibleSources.map((s) => (
                       <TableCell key={s}>{renderCell(s, "active")}</TableCell>
                     ))}

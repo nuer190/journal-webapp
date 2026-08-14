@@ -9,121 +9,39 @@ export async function GET(request: NextRequest) {
   const majorGroup = searchParams.get("majorGroup");
   const source = searchParams.get("source");
   const rank = searchParams.get("rank");
-  const rawAreaRules = searchParams.get("areaRules"); // 1. เพิ่มการรับ areaRules
+  const rawAreaRules = searchParams.get("areaRules");
   const page = parseInt(searchParams.get("page") ?? "1");
   const limit = parseInt(searchParams.get("limit") ?? "10");
 
   const where: Record<string, unknown> = {};
 
-  // 2. จัดการเงื่อนไข Area Rules (รองรับ AND / OR / NOT)
-  if (rawAreaRules) {
-    const andAreas: string[] = [];
-    const orAreas: string[] = [];
-    const notAreas: string[] = [];
+  const normalizedSource = source ? source.toUpperCase() : null;
 
-    rawAreaRules.split(",").forEach((item) => {
-      const [areaName, operator] = item.split(":");
-      const decodedArea = decodeURIComponent(areaName || "").trim();
-      if (decodedArea) {
-        if (operator === "AND") andAreas.push(decodedArea);
-        else if (operator === "NOT") notAreas.push(decodedArea);
-        else orAreas.push(decodedArea); // Default OR
-      }
-    });
-
-    const areaConditions: Record<string, unknown>[] = [];
-
-    // OR: วารสารต้องมีอย่างน้อย 1 Area ในกลุ่ม orAreas
-    if (orAreas.length > 0) {
-      areaConditions.push({
-        journalAreaDetails: {
-          some: {
-            area: {
-              area_name: { in: orAreas },
-            },
-          },
-        },
-      });
+  // 1. จัดการ Filter Source และ Rank
+  if (normalizedSource) {
+    switch (normalizedSource) {
+      case "ABDC":
+        where.abdc = rank
+          ? { rating_2025: rank }
+          : { rating_2025: { not: null, notIn: ["", "—", "N/A"] } };
+        break;
+      case "AJG":
+        where.ajg = rank
+          ? { ajg_2024_rating: rank }
+          : { ajg_2024_rating: { not: null, notIn: ["", "—", "N/A"] } };
+        break;
+      case "SCIMAGO":
+        where.scimago = rank
+          ? { sjr_best_quartile: rank }
+          : { sjr_best_quartile: { not: null, notIn: ["", "—", "N/A"] } };
+        break;
+      case "SCOPUS":
+        // Scopus ไม่มี Rank ให้เช็คว่ามี Record ในตาราง Scopus
+        where.scopus = { isNot: null };
+        break;
     }
-
-    // AND: วารสารต้องมีครบ "ทุก Area" ในกลุ่ม andAreas
-    if (andAreas.length > 0) {
-      andAreas.forEach((a) => {
-        areaConditions.push({
-          journalAreaDetails: {
-            some: {
-              area: {
-                area_name: a,
-              },
-            },
-          },
-        });
-      });
-    }
-
-    // NOT: วารสารต้อง "ไม่มี" Area ใดๆ ในกลุ่ม notAreas
-    if (notAreas.length > 0) {
-      areaConditions.push({
-        journalAreaDetails: {
-          none: {
-            area: {
-              area_name: { in: notAreas },
-            },
-          },
-        },
-      });
-    }
-
-    if (areaConditions.length > 0) {
-      where.AND = areaConditions;
-    }
-  } else if (area) {
-    // 3. Fallback ใช้ Logic เดิมเมื่อไม่มี areaRules (ส่งมาแค่ area ตัวเดียว)
-    where.journalAreaDetails = {
-      some: {
-        area: {
-          area_name: area,
-        },
-      },
-    };
-  }
-
-  // === ทุกอย่างด้านล่างนี้คงเดิม 100% ไม่กระทบ Logic อื่นๆ ===
-
-  if (areaGroup) {
-    where.journalAreaGroupDetails = {
-      some: {
-        areaGroup: {
-          area_group_name: areaGroup,
-        },
-      },
-    };
-  }
-
-  if (majorGroup) {
-    where.journalMajorGroupDetails = {
-      some: {
-        majorGroup: {
-          major_group_name: majorGroup,
-        },
-      },
-    };
-  }
-
-  if (source) {
-    const sourceMap: Record<string, Record<string, unknown>> = {
-      ABDC: { abdc: { isNot: null } },
-      AJG: { ajg: { isNot: null } },
-      Scimago: { scimago: { isNot: null } },
-      Scopus: { scopus: { isNot: null } },
-    };
-    const sourceFilter = sourceMap[source];
-    if (sourceFilter) {
-      Object.assign(where, sourceFilter);
-    }
-  }
-
-  if (rank) {
+  } else if (rank) {
+    // กรณีเลือกเฉพาะ Rank โดยไม่เลือก Source
     const abdcRanks = ["A*", "A", "B", "C"];
     const ajgRanks = ["4*", "4", "3", "2", "1"];
     const scimagoRanks = ["Q1", "Q2", "Q3", "Q4"];
@@ -144,6 +62,92 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Helper สำหรับสร้าง Filter Area + Source
+  const buildAreaFilter = (areaNameCondition: Record<string, unknown>) => {
+    return {
+      area: {
+        area_name: areaNameCondition,
+        ...(source ? { source: source } : {}),
+      },
+    };
+  };
+
+  // 2. จัดการเงื่อนไข Area Rules (AND / OR / NOT)
+  if (rawAreaRules) {
+    const andAreas: string[] = [];
+    const orAreas: string[] = [];
+    const notAreas: string[] = [];
+
+    rawAreaRules.split(",").forEach((item) => {
+      const [areaName, operator] = item.split(":");
+      const decodedArea = decodeURIComponent(areaName || "").trim();
+      if (decodedArea) {
+        if (operator === "AND") andAreas.push(decodedArea);
+        else if (operator === "NOT") notAreas.push(decodedArea);
+        else orAreas.push(decodedArea);
+      }
+    });
+
+    const areaConditions: Record<string, unknown>[] = [];
+
+    if (orAreas.length > 0) {
+      areaConditions.push({
+        journalAreaDetails: {
+          some: buildAreaFilter({ in: orAreas }),
+        },
+      });
+    }
+
+    if (andAreas.length > 0) {
+      andAreas.forEach((a) => {
+        areaConditions.push({
+          journalAreaDetails: {
+            some: buildAreaFilter({ equals: a }),
+          },
+        });
+      });
+    }
+
+    if (notAreas.length > 0) {
+      areaConditions.push({
+        journalAreaDetails: {
+          none: buildAreaFilter({ in: notAreas }),
+        },
+      });
+    }
+
+    if (areaConditions.length > 0) {
+      where.AND = areaConditions;
+    }
+  } else if (area) {
+    where.journalAreaDetails = {
+      some: buildAreaFilter({ equals: area }),
+    };
+  }
+
+  // 3. กรองตาม Area Group
+  if (areaGroup) {
+    where.journalAreaGroupDetails = {
+      some: {
+        areaGroup: {
+          area_group_name: areaGroup,
+        },
+      },
+    };
+  }
+
+  // 4. กรองตาม Major Group
+  if (majorGroup) {
+    where.journalMajorGroupDetails = {
+      some: {
+        majorGroup: {
+          major_group_name: majorGroup,
+        },
+      },
+    };
+  }
+
+  // 5. Query ข้อมูล
   const [journals, total] = await Promise.all([
     prisma.jOURNAL_MAIN.findMany({
       where,
@@ -158,6 +162,13 @@ export async function GET(request: NextRequest) {
         },
         ajg: { select: { ajg_2024_rating: true } },
         scimago: { select: { sjr_best_quartile: true } },
+        scopus: {
+          select: {
+            scopus_title: true,
+            active_status: true,
+            source_type: true,
+          },
+        },
       },
       skip: (page - 1) * limit,
       take: limit,
@@ -177,6 +188,7 @@ export async function GET(request: NextRequest) {
       abdc_area: j.abdc?.abdc_area ?? null,
       ajg: j.ajg,
       scimago: j.scimago,
+      scopus: j.scopus,
     })),
     total,
     page,
