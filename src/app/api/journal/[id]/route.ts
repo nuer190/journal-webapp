@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { journalIdSchema } from "@/lib/validations/journals";
 
-// Helper function
+// Helper: แปลง SciMago Categories String เป็น Array
 function parseScimagoCategories(categoriesStr: string | null | undefined) {
-  if (!categoriesStr || !categoriesStr.trim()) return [];
+  if (!categoriesStr?.trim()) return [];
 
   return categoriesStr
     .split(";")
@@ -12,17 +12,17 @@ function parseScimagoCategories(categoriesStr: string | null | undefined) {
     .filter(Boolean)
     .map((item) => {
       const match = item.match(/^(.*?)\s*\((Q[1-4])\)$/i);
-      if (match) {
-        return {
-          area: match[1].trim(),
-          rank: match[2].toUpperCase(),
-        };
-      }
       return {
-        area: item,
-        rank: null,
+        area: match ? match[1].trim() : item,
+        rank: match ? match[2].toUpperCase() : null,
       };
     });
+}
+
+// Helper: Split string สั้นๆ
+function splitAndClean(str: string | null | undefined): string[] {
+  if (!str?.trim()) return [];
+  return str.split(";").map((a) => a.trim()).filter(Boolean);
 }
 
 export async function GET(
@@ -33,24 +33,80 @@ export async function GET(
     const { id: rawId } = await params;
     const { id } = journalIdSchema.parse({ id: rawId });
 
+    // 1. Query ดึงข้อมูลแยก Scopus Area กับ General Area/Group/MajorGroup
     const journal = await prisma.jOURNAL_MAIN.findUnique({
       where: { id },
-      include: {
-        abdc: true,
-        ajg: true,
-        scimago: true,
-        scopus: true,
-        note: true,
-        journalScopusAreaDetails: {
+      select: {
+        id: true,
+        journal_title: true,
+        publisher: true,
+        abdc: {
           select: {
-            scopusArea: { select: { scopus_area_name: true } },
+            abdc_area: true,
+            rating_2025: true,
           },
         },
-        journalScopusAreaGroupDetails: {
-          select: { scopusAreaGroup: { select: { scopus_area_group_name: true } } },
+        ajg: {
+          select: {
+            ajg_subject_area: true,
+            ajg_2024_rating: true,
+          },
         },
-        journalScopusMajorGroupDetails: {
-          select: { scopusMajorGroup: { select: { scopus_major_group_name: true } } },
+        scimago: {
+          select: {
+            scimago_categories: true,
+            scimago_areas: true,
+            sjr_best_quartile: true,
+          },
+        },
+        scopus: {
+          select: {
+            active_status: true,
+            coverage_years: true,
+            source_type: true,
+            discontinued: true,
+          },
+        },
+        note: true,
+
+        // --- SCOPUS Specific Area ---
+        journalScopusAreaDetails: {
+          select: {
+            scopusArea: {
+              select: {
+                scopus_area_name: true,
+              },
+            },
+          },
+        },
+
+        // --- General Area, Area Group & Major Group ---
+        journalAreaDetails: {
+          select: {
+            area: {
+              select: {
+                area_name: true,
+              },
+            },
+          },
+        },
+        journalAreaGroupDetails: {
+          select: {
+            areaGroup: {
+              select: {
+                area_group_name: true,
+              },
+            },
+          },
+        },
+        journalMajorGroupDetails: {
+          select: {
+            majorGroup: {
+              select: {
+                major_group_name: true,
+              },
+            },
+          },
         },
       },
     });
@@ -59,109 +115,91 @@ export async function GET(
       return NextResponse.json({ error: "Journal not found" }, { status: 404 });
     }
 
-    const scopusAreaGroups = journal.journalScopusAreaGroupDetails.map(
-      (d) => d.scopusAreaGroup.scopus_area_group_name
-    );
-    const scopusMajorGroups = journal.journalScopusMajorGroupDetails.map(
-      (d) => d.scopusMajorGroup.scopus_major_group_name
-    );
+    // 2. ดึง List ของ Area Group และ Major Group
+    const areaGroups = journal.journalAreaGroupDetails
+      .map((d) => d.areaGroup?.area_group_name)
+      .filter((name): name is string => Boolean(name));
 
-    const parsedScimagoCategories = parseScimagoCategories(
+    const majorGroups = journal.journalMajorGroupDetails
+      .map((d) => d.majorGroup?.major_group_name)
+      .filter((name): name is string => Boolean(name));
+
+    const primaryAreaGroup = areaGroups[0] || "—";
+    const primaryMajorGroup = majorGroups[0] || "—";
+
+    // 3. ABDC Breakdown
+    const abdcAreas = splitAndClean(journal.abdc?.abdc_area);
+    const abdcDetails = journal.abdc
+      ? {
+          ...journal.abdc,
+          area_details: abdcAreas.map((areaName, idx) => ({
+            area: areaName,
+            area_group: areaGroups[idx] || primaryAreaGroup,
+            major_group: majorGroups[idx] || primaryMajorGroup || "Business & Commerce",
+            rank: journal.abdc?.rating_2025 ?? null,
+          })),
+        }
+      : null;
+
+    // 4. AJG Breakdown
+    const ajgAreas = splitAndClean(journal.ajg?.ajg_subject_area);
+    const ajgDetails = journal.ajg
+      ? {
+          ...journal.ajg,
+          area_details: ajgAreas.map((areaName, idx) => ({
+            area: areaName,
+            area_group: areaGroups[idx] || primaryAreaGroup,
+            major_group: majorGroups[idx] || primaryMajorGroup || "Business & Management",
+            rank: journal.ajg?.ajg_2024_rating ?? null,
+          })),
+        }
+      : null;
+
+    // 5. SCIMAGO Breakdown
+    const parsedScimagoCat = parseScimagoCategories(
       journal.scimago?.scimago_categories
     );
+    const scimagoAreas =
+      parsedScimagoCat.length > 0
+        ? parsedScimagoCat
+        : splitAndClean(journal.scimago?.scimago_areas).map((a) => ({
+            area: a,
+            rank: null,
+          }));
+
+    const scimagoDetails = journal.scimago
+      ? {
+          ...journal.scimago,
+          area_details: scimagoAreas.map((cat, idx) => ({
+            area: cat.area,
+            area_group: areaGroups[idx] || primaryAreaGroup,
+            major_group: majorGroups[idx] || primaryMajorGroup || "General Science",
+            rank: cat.rank || journal.scimago?.sjr_best_quartile || null,
+          })),
+        }
+      : null;
+
+    // 6. SCOPUS Breakdown (ดึงจาก Scopus Area โดยตรง)
+    const scopusDetails = journal.scopus
+      ? {
+          ...journal.scopus,
+          area_details: journal.journalScopusAreaDetails.map((d, idx) => ({
+            area: d.scopusArea?.scopus_area_name ?? "—",
+            area_group: areaGroups[idx] || primaryAreaGroup,
+            major_group: majorGroups[idx] || primaryMajorGroup,
+            rank: journal.scopus?.active_status ?? null,
+          })),
+        }
+      : null;
 
     return NextResponse.json({
       id: journal.id,
       journal_title: journal.journal_title,
       publisher: journal.publisher,
-
-      // --- ABDC ---
-      abdc: journal.abdc
-        ? {
-            ...journal.abdc,
-            area_details: (journal.abdc.abdc_area || "")
-              .split(";")
-              .map((a) => a.trim())
-              .filter(Boolean)
-              .map((areaName) => ({
-                area: areaName,
-                area_group: scopusAreaGroups[0] || areaName,
-                major_group: scopusMajorGroups[0] || "Business & Commerce",
-                rank: journal.abdc?.rating_2025 ?? null,
-              })),
-          }
-        : null,
-
-      // --- AJG ---
-      ajg: journal.ajg
-        ? {
-            ...journal.ajg,
-            area_details: (journal.ajg.ajg_subject_area || "")
-              .split(";")
-              .map((a) => a.trim())
-              .filter(Boolean)
-              .map((areaName) => ({
-                area: areaName,
-                area_group: scopusAreaGroups[0] || areaName,
-                major_group: scopusMajorGroups[0] || "Business & Management",
-                rank: journal.ajg?.ajg_2024_rating ?? null,
-              })),
-          }
-        : null,
-
-      // --- SCIMAGO ---
-      scimago: journal.scimago
-        ? {
-            ...journal.scimago,
-            area_details:
-              parsedScimagoCategories.length > 0
-                ? parsedScimagoCategories.map((cat, idx) => ({
-                    area: cat.area,
-                    area_group:
-                      scopusAreaGroups[idx] || scopusAreaGroups[0] || cat.area,
-                    major_group:
-                      scopusMajorGroups[idx] ||
-                      scopusMajorGroups[0] ||
-                      "General Science",
-                    rank: cat.rank || journal.scimago?.sjr_best_quartile || null,
-                  }))
-                : (journal.scimago.scimago_areas || "")
-                    .split(";")
-                    .map((a) => a.trim())
-                    .filter(Boolean)
-                    .map((areaName, idx) => ({
-                      area: areaName,
-                      area_group:
-                        scopusAreaGroups[idx] || scopusAreaGroups[0] || areaName,
-                      major_group:
-                        scopusMajorGroups[idx] ||
-                        scopusMajorGroups[0] ||
-                        "General Science",
-                      rank: journal.scimago?.sjr_best_quartile || null,
-                    })),
-          }
-        : null,
-
-      // --- SCOPUS ---
-      scopus: journal.scopus
-        ? {
-            active_status: journal.scopus?.active_status ?? null,
-            coverage_years: journal.scopus?.coverage_years ?? null,
-            source_type: journal.scopus?.source_type ?? null,
-            discontinued: journal.scopus?.discontinued ?? null,
-            area_details: journal.journalScopusAreaDetails.map(
-              (d: any, idx) => ({
-                area: d.scopusArea?.scopus_area_name ?? "—",
-                area_group:
-                  scopusAreaGroups[idx] || scopusAreaGroups[0] || "—",
-                major_group:
-                  scopusMajorGroups[idx] || scopusMajorGroups[0] || "—",
-                rank: d?.rank ?? journal.scopus?.active_status ?? null,
-              })
-            ),
-          }
-        : null,
-
+      abdc: abdcDetails,
+      ajg: ajgDetails,
+      scimago: scimagoDetails,
+      scopus: scopusDetails,
       note: journal.note,
     });
   } catch (error) {

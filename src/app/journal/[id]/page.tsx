@@ -785,7 +785,6 @@ export default function JournalDetailPage() {
                   <TableRow>
                     <TableHead className="w-[50px] text-center">#</TableHead>
                     <TableHead className="w-[120px] font-semibold">Source</TableHead>
-                    <TableHead className="font-semibold">Major Group</TableHead>
                     <TableHead className="font-semibold">Area Group</TableHead>
                     <TableHead className="font-semibold">Area</TableHead>
                     <TableHead className="w-[100px] font-semibold">Rank</TableHead>
@@ -799,9 +798,6 @@ export default function JournalDetailPage() {
                       </TableCell>
                       <TableCell className="font-medium">
                         {SOURCE_LABELS[row.source]}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {row.majorGroup ?? "—"}
                       </TableCell>
                       <TableCell className="text-sm">
                         {row.areaGroup ?? "—"}

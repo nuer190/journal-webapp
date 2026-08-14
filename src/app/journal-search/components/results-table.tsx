@@ -32,7 +32,7 @@ export function ResultsTable({ journals }: ResultsTableProps) {
             <TableHead>SJR</TableHead>
             <TableHead>ISSN</TableHead>
             <TableHead>eISSN</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Scopus Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
