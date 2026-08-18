@@ -1,3 +1,5 @@
+// components/source-distribution.tsx
+
 "use client";
 
 import { Cell, Pie, PieChart } from "recharts";
@@ -25,10 +27,12 @@ const SOURCE_COLORS: Record<string, string> = {
   scopus: "#22c55e",  // เขียว
 };
 
+// 🟢 ฐาน ABDC
+const ABDC_BASE_COUNT = 2649;
+
 export function SourceDistribution({ data }: Props) {
   const config = sourceConfig(data.map((d) => d.name));
 
-  // แมปสีตามชื่อ Source
   const dataWithColors = data.map((item) => {
     const key = item.name.toLowerCase();
     const fill = SOURCE_COLORS[key] || "#94a3b8";
@@ -60,7 +64,13 @@ export function SourceDistribution({ data }: Props) {
           </Pie>
         </PieChart>
       </ChartContainer>
-      <PieLegend items={dataWithColors} className="w-full max-w-[340px]" />
+      
+      {/* 🟢 ส่ง totalBase={ABDC_BASE_COUNT} ไปที่ PieLegend */}
+      <PieLegend 
+        items={dataWithColors} 
+        totalBase={ABDC_BASE_COUNT} 
+        className="w-full max-w-[340px]" 
+      />
     </div>
   );
 }

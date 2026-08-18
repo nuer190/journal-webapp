@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/generated/prisma/client";
 
-// ฟังก์ชันแปลงข้อความให้เป็น Title Case (เช่น "book series" -> "Book Series")
+// ฟังก์ชันแปลงข้อความให้เป็น Title Case
 function toTitleCase(str: string): string {
   return str
     .trim()
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
       });
     }
 
-    // Filter Source Type (ใช้ mode: "insensitive" เพื่อให้ค้นหาเจอทั้งตัวเล็กและตัวใหญ่)
+    // Filter Source Type
     if (sourceTypeParam && sourceTypeParam.toLowerCase() !== "all") {
       andConditions.push({
         source_type: {
@@ -183,13 +183,17 @@ export async function GET(req: NextRequest) {
         .filter((p): p is string => Boolean(p && p.trim() !== ""))
     ).size;
 
-    // Chart Data Summary
+    // ==========================================
+    // 🟢 Chart Data Summary (แก้ไขเพิ่มเติม)
+    // ==========================================
     const hasAreaOrRankFilter = selectedAreas.length > 0 || selectedRanks.length > 0;
 
     const chartSummaryRaw = await prisma.nEW_JOURNAL_AREA_MAPPING.groupBy({
-      by: ["subject_area_id"],
+      by: ["source_id", "subject_area_id"],
       where: {
         journal: journalWhereCondition,
+        // 🟢 เพิ่มการกรองตาม source_id ที่เลือกเข้ามา
+        ...(sourceId ? { source_id: sourceId } : {}),
         ...(selectedAreas.length > 0 ? { subject_area_id: { in: selectedAreas } } : {}),
       },
       _count: { journal_id: true },
@@ -207,18 +211,31 @@ export async function GET(req: NextRequest) {
       displayMode = "top30";
     }
 
-    const chartAreaIds = finalChartSummary.map((c) => c.subject_area_id);
+    const chartAreaIds = Array.from(new Set(finalChartSummary.map((c) => c.subject_area_id)));
+    const chartSourceIds = Array.from(new Set(finalChartSummary.map((c) => c.source_id)));
 
-    const chartSubjectAreas = await prisma.nEW_SUBJECT_AREA.findMany({
-      where: { id: { in: chartAreaIds } },
-      select: { id: true, area_name: true },
-    });
+    // ดึงข้อมูล Subject Area และ Source มาแมปกับ ID
+    const [chartSubjectAreas, chartSources] = await Promise.all([
+      prisma.nEW_SUBJECT_AREA.findMany({
+        where: { id: { in: chartAreaIds } },
+        select: { id: true, area_name: true },
+      }),
+      prisma.nEW_SOURCE.findMany({
+        where: { id: { in: chartSourceIds } },
+        select: { id: true, source_name: true },
+      }),
+    ]);
 
+    // สร้างข้อมูล chartData ให้มีข้อมูลทั้ง Subject Area และ Source
     const chartData = finalChartSummary.map((item) => {
       const area = chartSubjectAreas.find((a) => a.id === item.subject_area_id);
+      const source = chartSources.find((s) => s.id === item.source_id);
+
       return {
         subject_area_id: item.subject_area_id,
         area_name: area ? area.area_name : `Area ${item.subject_area_id}`,
+        source_id: item.source_id,
+        source_name: source ? source.source_name : `Source ${item.source_id}`,
         count: item._count.journal_id,
       };
     });
@@ -257,7 +274,7 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    // 🟢 รวมค่า ปรับเป็น Title Case และตัดค่าซ้ำ (Deduplicate)
+    // รวมค่า ปรับเป็น Title Case และตัดค่าซ้ำ (Deduplicate)
     const rawSourceTypes = filteredSourceTypesOptions
       .map((item) => item.source_type)
       .filter((type): type is string => Boolean(type && type.trim() !== ""));
@@ -279,7 +296,7 @@ export async function GET(req: NextRequest) {
       sources,
       areas: filteredAreasOptions,
       ranks: filteredRanksOptions.map((r) => r.overall_rank).filter(Boolean),
-      sourceTypes: sourceTypesList, // 🟢 ได้เฉพาะ ["Book Series", "Journal", "Trade Journal"]
+      sourceTypes: sourceTypesList,
       journals: formattedJournals,
       chartData,
       pagination: {

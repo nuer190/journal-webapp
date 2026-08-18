@@ -70,6 +70,8 @@ export interface Journal {
 export interface ChartDataItem {
   subject_area_id: number;
   area_name: string;
+  SourceId: number;
+  source_name: string;
   count: number;
 }
 
